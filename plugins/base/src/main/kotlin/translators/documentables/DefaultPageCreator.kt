@@ -18,6 +18,7 @@ import kotlin.reflect.full.isSubclassOf
 import org.jetbrains.dokka.DokkaConfiguration.DokkaSourceSet
 import org.jetbrains.dokka.base.resolvers.anchors.SymbolAnchorHint
 import org.jetbrains.dokka.base.transformers.documentables.ClashingDriIdentifier
+import org.jetbrains.dokka.model.properties.plus
 
 private typealias GroupedTags = Map<KClass<out TagWrapper>, List<Pair<DokkaSourceSet?, TagWrapper>>>
 
@@ -97,7 +98,7 @@ open class DefaultPageCreator(
         }
         +contentForComments(m)
 
-        block("Packages", 2, ContentKind.Packages, m.packages, m.sourceSets.toSet()) {
+        block("Packages", 2, ContentKind.Packages, m.packages, m.sourceSets.toSet(), needsAnchors = true) {
             val documentations = it.sourceSets.map { platform ->
                 it.descriptions[platform]?.also { it.root }
             }
@@ -157,7 +158,7 @@ open class DefaultPageCreator(
             extra = mainExtra + SimpleAttr.header("Properties")
         ) {
             link(it.name, it.dri, kind = ContentKind.Main)
-            sourceSetDependentHint(it.dri, it.sourceSets.toSet(), kind = ContentKind.SourceSetDependentHint) {
+            sourceSetDependentHint(it.dri, it.sourceSets.toSet(), kind = ContentKind.SourceSetDependentHint, extra = PropertyContainer.empty()) {
                 contentForBrief(it)
                 +buildSignature(it)
             }
@@ -172,11 +173,10 @@ open class DefaultPageCreator(
                     }),
                     map.entries.flatMap { entry -> entry.value.map { Pair(entry.key, it) } }
                         .groupBy({ it.second }, { it.first }).map { (classlike, platforms) ->
-                            buildGroup(setOf(dri), platforms.toSet(), ContentKind.Inheritors) {
-                                link(
-                                    classlike.classNames?.substringBeforeLast(".") ?: classlike.toString()
-                                        .also { logger.warn("No class name found for DRI $classlike") }, classlike
-                                )
+                            val label = classlike.classNames?.substringBeforeLast(".") ?: classlike.toString()
+                                .also { logger.warn("No class name found for DRI $classlike") }
+                            buildGroup(setOf(dri), platforms.toSet(), ContentKind.Inheritors, extra = mainExtra + SymbolAnchorHint(label)) {
+                                link(label, classlike)
                             }
                         },
                     DCI(setOf(dri), ContentKind.Inheritors),
@@ -229,6 +229,7 @@ open class DefaultPageCreator(
                     ContentKind.Constructors,
                     c.constructors.filter { it.extra[PrimaryConstructorExtra] == null || it.documentation.isNotEmpty() },
                     c.sourceSets,
+                    needsAnchors = true,
                     extra = PropertyContainer.empty<ContentNode>() + SimpleAttr.header("Constructors")
                 ) {
                     link(it.name, it.dri, kind = ContentKind.Main)
@@ -236,7 +237,8 @@ open class DefaultPageCreator(
                         it.dri,
                         it.sourceSets.toSet(),
                         kind = ContentKind.SourceSetDependentHint,
-                        styles = emptySet()
+                        styles = emptySet(),
+                        extra = PropertyContainer.empty<ContentNode>()
                     ) {
                         contentForBrief(it)
                         +buildSignature(it)
@@ -251,11 +253,12 @@ open class DefaultPageCreator(
                     c.entries,
                     c.sourceSets.toSet(),
                     needsSorting = false,
+                    needsAnchors = true,
                     extra = mainExtra + SimpleAttr.header("Entries"),
                     styles = emptySet()
                 ) {
                     link(it.name, it.dri)
-                    sourceSetDependentHint(it.dri, it.sourceSets.toSet(), kind = ContentKind.SourceSetDependentHint) {
+                    sourceSetDependentHint(it.dri, it.sourceSets.toSet(), kind = ContentKind.SourceSetDependentHint, extra = PropertyContainer.empty<ContentNode>()) {
                         contentForBrief(it)
                         +buildSignature(it)
                     }
@@ -395,7 +398,7 @@ open class DefaultPageCreator(
                                         buildGroup(
                                             sourceSets = setOf(platform),
                                             kind = ContentKind.Comment,
-                                            styles = mainStyles + ContentStyle.RowTitle
+                                            styles = mainStyles + ContentStyle.RowTitle,
                                         ) {
                                             if (it.address != null) link(
                                                 it.name,
@@ -512,16 +515,18 @@ open class DefaultPageCreator(
                             dri = elements.map { it.dri }.toSet(),
                             sourceSets = elements.flatMap { it.sourceSets }.toSet(),
                             kind = kind,
-                            styles = emptySet()
-                        ) {
-                            link(elementName.orEmpty(), elements.first().dri, kind = kind)
-                            divergentGroup(
-                                ContentDivergentGroup.GroupID(name),
-                                elements.map { it.dri }.toSet(),
-                                kind = kind
+                            styles = emptySet(),
+                        extra = elementName?.let { name -> extra + SymbolAnchorHint(name) } ?: extra
+                    ) {
+                        link(elementName.orEmpty(), elements.first().dri, kind = kind)
+                        divergentGroup(
+                            ContentDivergentGroup.GroupID(name),
+                            elements.map { it.dri }.toSet(),
+                            kind = kind,
+                            extra = extra
                             ) {
                                 elements.map {
-                                    instance(setOf(it.dri), it.sourceSets.toSet(), extra = PropertyContainer.withAll(SymbolAnchorHint)) {
+                                    instance(setOf(it.dri), it.sourceSets.toSet(), extra = PropertyContainer.withAll(SymbolAnchorHint(it.name ?: ""))) {
                                         before {
                                             contentForBrief(it)
                                             contentForSinceKotlin(it)

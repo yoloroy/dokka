@@ -26,6 +26,9 @@ class DokkaGenerator(
         report("Initializing plugins")
         val context = initializePlugins(configuration, logger)
 
+        report("Validity check")
+        validityCheck(context)
+
         report("Creating documentation models")
         val modulesFromPlatforms = createDocumentationModels(context)
 
@@ -131,6 +134,15 @@ class DokkaGenerator(
                 "Failed with warningCount=${logger.warningsCount} and errorCount=${logger.errorsCount}"
             )
         }
+    }
+
+    fun validityCheck(context: DokkaContext) {
+        val (preGenerationCheckResult, checkMessages) = context[CoreExtensions.preGenerationCheck].fold(
+            Pair(true, emptyList<String>())
+        ) { acc, checker -> checker() + acc }
+        if (!preGenerationCheckResult) throw DokkaException(
+            "Pre-generation validity check failed: ${checkMessages.joinToString(",")}"
+        )
     }
 
     private fun translateSources(sourceSet: DokkaSourceSet, context: DokkaContext) =

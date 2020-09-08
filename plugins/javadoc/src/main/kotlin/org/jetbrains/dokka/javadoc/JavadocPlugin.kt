@@ -9,6 +9,7 @@ import org.jetbrains.dokka.base.renderers.PackageListCreator
 import org.jetbrains.dokka.base.renderers.RootCreator
 import org.jetbrains.dokka.base.resolvers.shared.RecognizedLinkFormat
 import org.jetbrains.dokka.javadoc.pages.*
+import org.jetbrains.dokka.javadoc.validity.MultiplatformConfiguredChecker
 import org.jetbrains.dokka.kotlinAsJava.KotlinAsJavaPlugin
 import org.jetbrains.dokka.plugability.DokkaPlugin
 import org.jetbrains.dokka.plugability.querySingle
@@ -25,6 +26,12 @@ class JavadocPlugin : DokkaPlugin() {
         (CoreExtensions.renderer
                 providing { ctx -> KorteJavadocRenderer(dokkaBasePlugin.querySingle { outputWriter }, ctx, "views") }
                 override dokkaBasePlugin.htmlRenderer)
+    }
+
+    val javadocMultiplatformCheck by extending {
+        CoreExtensions.preGenerationCheck providing { context ->
+            MultiplatformConfiguredChecker(context)
+        }
     }
 
     val pageTranslator by extending {

@@ -2,12 +2,14 @@ package org.jetbrains.dokka.kotlinAsJava
 
 import org.jetbrains.dokka.CoreExtensions
 import org.jetbrains.dokka.base.DokkaBase
+import org.jetbrains.dokka.base.translators.documentables.DefaultDocumentableFilteringStrategies
 import org.jetbrains.dokka.kotlinAsJava.signatures.JavaSignatureProvider
 import org.jetbrains.dokka.kotlinAsJava.transformers.KotlinAsJavaDocumentableTransformer
+import org.jetbrains.dokka.kotlinAsJava.translators.KotlinAsjavaDocumentableFilteringStrategies
 import org.jetbrains.dokka.plugability.DokkaPlugin
 
 class KotlinAsJavaPlugin : DokkaPlugin() {
-    val kotlinAsJavaDocumentableToPageTranslator by extending {
+    val kotlinAsJavaDocumentableTransformer by extending {
         CoreExtensions.documentableTransformer with KotlinAsJavaDocumentableTransformer()
     }
     val javaSignatureProvider by extending {
@@ -15,5 +17,11 @@ class KotlinAsJavaPlugin : DokkaPlugin() {
         dokkaBasePlugin.signatureProvider providing { ctx ->
             JavaSignatureProvider(ctx.single(dokkaBasePlugin.commentsToContentConverter), ctx.logger)
         } override dokkaBasePlugin.kotlinSignatureProvider
+    }
+
+    val defaultDocumentablesFilteringStrategies by extending {
+        val dokkaBasePlugin = plugin<DokkaBase>()
+        dokkaBasePlugin.documentablesFilteringStrategies with KotlinAsjavaDocumentableFilteringStrategies override
+                dokkaBasePlugin.defaultDocumentablesFilteringStrategies
     }
 }

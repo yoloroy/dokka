@@ -23,7 +23,9 @@ import org.jetbrains.dokka.base.transformers.pages.merger.*
 import org.jetbrains.dokka.base.transformers.pages.samples.DefaultSamplesTransformer
 import org.jetbrains.dokka.base.transformers.pages.sourcelinks.SourceLinksTransformer
 import org.jetbrains.dokka.base.translators.descriptors.DefaultDescriptorToDocumentableTranslator
+import org.jetbrains.dokka.base.translators.documentables.DefaultDocumentableFilteringStrategies
 import org.jetbrains.dokka.base.translators.documentables.DefaultDocumentableToPageTranslator
+import org.jetbrains.dokka.base.translators.documentables.DocumentablesFilteringStrategies
 import org.jetbrains.dokka.base.translators.documentables.PageContentBuilder
 import org.jetbrains.dokka.base.translators.psi.DefaultPsiToDocumentableTranslator
 import org.jetbrains.dokka.plugability.DokkaPlugin
@@ -39,7 +41,7 @@ class DokkaBase : DokkaPlugin() {
     val htmlPreprocessors by extensionPoint<PageTransformer>()
     val kotlinAnalysis by extensionPoint<KotlinAnalysis>()
     val tabSortingStrategy by extensionPoint<TabSortingStrategy>()
-
+    val documentablesFilteringStrategies by extensionPoint<DocumentablesFilteringStrategies>()
 
     val descriptorToDocumentableTranslator by extending {
         CoreExtensions.sourceToDocumentableTranslator providing { ctx ->
@@ -115,7 +117,7 @@ class DokkaBase : DokkaPlugin() {
             DefaultDocumentableToPageTranslator(
                 ctx.single(commentsToContentConverter),
                 ctx.single(signatureProvider),
-                ctx.logger
+                ctx
             )
         }
     }
@@ -224,5 +226,9 @@ class DokkaBase : DokkaPlugin() {
         CoreExtensions.allModulePageCreator providing {
             MultimodulePageCreator(it)
         }
+    }
+
+    val defaultDocumentablesFilteringStrategies by extending {
+        documentablesFilteringStrategies with DefaultDocumentableFilteringStrategies
     }
 }

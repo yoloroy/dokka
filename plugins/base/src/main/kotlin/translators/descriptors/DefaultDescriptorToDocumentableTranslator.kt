@@ -316,12 +316,15 @@ private class DokkaDescriptorVisitor(
         )
     }
 
-    override fun visitPropertyDescriptor(descriptor: PropertyDescriptor, parent: DRIWithPlatformInfo): DProperty {
-        val dri = parent.dri.copy(callable = Callable.from(descriptor))
+    override fun visitPropertyDescriptor(originalDescriptor: PropertyDescriptor, parent: DRIWithPlatformInfo): DProperty {
+        val dri = parent.dri.copy(callable = Callable.from(originalDescriptor))
+
+        val descriptor = originalDescriptor.getConcreteDescriptor()
+
         val isExpect = descriptor.isExpect
         val isActual = descriptor.isActual
 
-        val actual = descriptor.createSources()
+        val actual = originalDescriptor.createSources()
         return DProperty(
             dri = dri,
             name = descriptor.name.asString(),
@@ -351,18 +354,19 @@ private class DokkaDescriptorVisitor(
         )
     }
 
-    fun CallableMemberDescriptor.createDRI(wasOverridenBy: DRI? = null): Pair<DRI, DRI?> =
-        if (kind == CallableMemberDescriptor.Kind.DECLARATION || overriddenDescriptors.isEmpty())
-            Pair(DRI.from(this), wasOverridenBy)
-        else
-            overriddenDescriptors.first().createDRI(DRI.from(this))
+    fun CallableMemberDescriptor.createDRI(): Pair<DRI, DRI?> = DRI.from(this).let { dri ->
+        Pair(dri, DRI.from(getConcreteDescriptor()).takeIf { it != dri })
+    }
 
-    override fun visitFunctionDescriptor(descriptor: FunctionDescriptor, parent: DRIWithPlatformInfo): DFunction {
-        val (dri, inheritedFrom) = descriptor.createDRI()
+    override fun visitFunctionDescriptor(originalDescriptor: FunctionDescriptor, parent: DRIWithPlatformInfo): DFunction {
+        val (dri, inheritedFrom) = originalDescriptor.createDRI()
+
+        val descriptor = originalDescriptor.getConcreteDescriptor()
+
         val isExpect = descriptor.isExpect
         val isActual = descriptor.isActual
 
-        val actual = descriptor.createSources()
+        val actual = originalDescriptor.createSources()
         return DFunction(
             dri = dri,
             name = descriptor.name.asString(),
@@ -770,6 +774,9 @@ private class DokkaDescriptorVisitor(
         }
     }
 
+    private fun <T : CallableMemberDescriptor> T.getConcreteDescriptor(): T =
+        if (kind != CallableMemberDescriptor.Kind.FAKE_OVERRIDE) this
+        else overriddenDescriptors.first().getConcreteDescriptor() as T
 
     private fun ValueParameterDescriptor.getDefaultValue(): String? =
         (source as? KotlinSourceElement)?.psi?.children?.find { it is KtExpression }?.text

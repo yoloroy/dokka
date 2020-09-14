@@ -40,6 +40,7 @@ object DocTagsFromIElementFactory {
             GFMElementTypes.HEADER                      -> Th(children, params)
             GFMElementTypes.ROW                         -> Tr(children, params)
             GFMTokenTypes.CELL                          -> Td(children, params)
+            MarkdownElementTypes.MARKDOWN_FILE          -> RootDocTag(children, params)
             else                                        -> CustomDocTag(children, params)
         }
 }

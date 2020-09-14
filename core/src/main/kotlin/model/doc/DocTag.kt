@@ -250,6 +250,11 @@ data class Pre(
     override val params: Map<String, String> = emptyMap()
 ) : DocTag()
 
+data class RootDocTag(
+    override val children: List<DocTag> = emptyList(),
+    override val params: Map<String, String> = emptyMap()
+) : DocTag()
+
 data class Script(
     override val children: List<DocTag> = emptyList(),
     override val params: Map<String, String> = emptyMap()

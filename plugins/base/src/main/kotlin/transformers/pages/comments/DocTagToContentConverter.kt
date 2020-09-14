@@ -175,6 +175,15 @@ object DocTagToContentConverter : CommentsToContentConverter {
                     styles
                 )
             )
+            is RootDocTag -> listOf(
+                ContentGroup(
+                    buildChildren(docTag),
+                    dci,
+                    sourceSets.toDisplaySourceSets(),
+                    styles,
+                    extra = extra
+                )
+            )
             else -> buildChildren(docTag)
         }
     }

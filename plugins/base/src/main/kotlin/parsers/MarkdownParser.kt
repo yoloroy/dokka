@@ -216,10 +216,11 @@ class MarkdownParser(
             body = text.substring(node.startOffset, node.endOffset).transform()
         )
 
-        private fun markdownFileHandler(node: ASTNode) = if (node.children.size == 1)
-            visitNode(node.children.first())
-        else
-            defaultHandler(node)
+        private fun markdownFileHandler(node: ASTNode) =
+            DocTagsFromIElementFactory.getInstance(
+                node.type,
+                children = node.children.evaluateChildren()
+            )
 
         private fun strikeThroughHandler(node: ASTNode) = DocTagsFromIElementFactory.getInstance(
             node.type,
@@ -314,7 +315,7 @@ class MarkdownParser(
 
         private fun defaultHandler(node: ASTNode): DocTag =
             DocTagsFromIElementFactory.getInstance(
-                MarkdownElementTypes.PARAGRAPH,
+                node.type,
                 children = node.children.evaluateChildren()
             )
 

@@ -55,8 +55,8 @@ class JavadocParser(
         return DocumentationNode(nodes)
     }
 
-    private fun wrapTagIfNecessary(list: List<DocTag>): DocTag =
-        if (list.size == 1) list.first() else P(list)
+    private fun wrapTagIfNecessary(list: List<DocTag>): RootDocTag =
+        if (list.size == 1 && list.first() is RootDocTag) list.first() as RootDocTag else RootDocTag(list)
 
     private fun findClosestDocComment(element: PsiNamedElement): PsiDocComment? {
         (element as? PsiDocCommentOwner)?.docComment?.run { return this }

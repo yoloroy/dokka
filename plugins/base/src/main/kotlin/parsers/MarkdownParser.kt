@@ -315,7 +315,7 @@ class MarkdownParser(
 
         private fun defaultHandler(node: ASTNode): DocTag =
             DocTagsFromIElementFactory.getInstance(
-                node.type,
+                MarkdownElementTypes.PARAGRAPH,
                 children = node.children.evaluateChildren()
             )
 
@@ -466,46 +466,46 @@ class MarkdownParser(
             DocumentationNode(
                 (listOf(kDocTag) + getAllKDocTags(findParent(kDocTag))).map {
                     when (it.knownTag) {
-                        null -> if (it.name == null) Description(parseStringToDocNode(it.getContent())) else CustomTagWrapper(
-                            parseStringToDocNode(it.getContent()),
+                        null -> if (it.name == null) Description(parseStringToDocNode(it.getContent()) as RootDocTag) else CustomTagWrapper(
+                            parseStringToDocNode(it.getContent()) as RootDocTag,
                             it.name!!
                         )
-                        KDocKnownTag.AUTHOR -> Author(parseStringToDocNode(it.getContent()))
+                        KDocKnownTag.AUTHOR -> Author(parseStringToDocNode(it.getContent()) as RootDocTag)
                         KDocKnownTag.THROWS -> Throws(
-                            parseStringToDocNode(it.getContent()),
+                            parseStringToDocNode(it.getContent()) as RootDocTag,
                             it.getSubjectName().orEmpty()
                         )
                         KDocKnownTag.EXCEPTION -> Throws(
-                            parseStringToDocNode(it.getContent()),
+                            parseStringToDocNode(it.getContent()) as RootDocTag,
                             it.getSubjectName().orEmpty()
                         )
                         KDocKnownTag.PARAM -> Param(
-                            parseStringToDocNode(it.getContent()),
+                            parseStringToDocNode(it.getContent()) as RootDocTag,
                             it.getSubjectName().orEmpty()
                         )
-                        KDocKnownTag.RECEIVER -> Receiver(parseStringToDocNode(it.getContent()))
-                        KDocKnownTag.RETURN -> Return(parseStringToDocNode(it.getContent()))
+                        KDocKnownTag.RECEIVER -> Receiver(parseStringToDocNode(it.getContent()) as RootDocTag)
+                        KDocKnownTag.RETURN -> Return(parseStringToDocNode(it.getContent()) as RootDocTag)
                         KDocKnownTag.SEE -> See(
-                            parseStringToDocNode(it.getContent()),
+                            parseStringToDocNode(it.getContent()) as RootDocTag,
                             it.getSubjectName().orEmpty(),
                             parseStringToDocNode("[${it.getSubjectName()}]")
                                 .let {
-                                    val link = it.children[0]
+                                    val link = it.children.first().children.first()
                                     if (link is DocumentationLink) link.dri
                                     else null
                                 }
                         )
-                        KDocKnownTag.SINCE -> Since(parseStringToDocNode(it.getContent()))
-                        KDocKnownTag.CONSTRUCTOR -> Constructor(parseStringToDocNode(it.getContent()))
+                        KDocKnownTag.SINCE -> Since(parseStringToDocNode(it.getContent()) as RootDocTag)
+                        KDocKnownTag.CONSTRUCTOR -> Constructor(parseStringToDocNode(it.getContent()) as RootDocTag)
                         KDocKnownTag.PROPERTY -> Property(
-                            parseStringToDocNode(it.getContent()),
+                            parseStringToDocNode(it.getContent()) as RootDocTag,
                             it.getSubjectName().orEmpty()
                         )
                         KDocKnownTag.SAMPLE -> Sample(
-                            parseStringToDocNode(it.getContent()),
+                            parseStringToDocNode(it.getContent()) as RootDocTag,
                             it.getSubjectName().orEmpty()
                         )
-                        KDocKnownTag.SUPPRESS -> Suppress(parseStringToDocNode(it.getContent()))
+                        KDocKnownTag.SUPPRESS -> Suppress(parseStringToDocNode(it.getContent()) as RootDocTag)
                     }
                 }
             )

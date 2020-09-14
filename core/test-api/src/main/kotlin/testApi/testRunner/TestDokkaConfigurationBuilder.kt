@@ -5,6 +5,7 @@ import org.jetbrains.dokka.links.DRI
 import org.jetbrains.dokka.model.*
 import org.jetbrains.dokka.model.doc.Description
 import org.jetbrains.dokka.model.doc.DocumentationNode
+import org.jetbrains.dokka.model.doc.RootDocTag
 import org.jetbrains.dokka.model.doc.Text
 import org.jetbrains.dokka.model.properties.PropertyContainer
 import java.io.File
@@ -187,6 +188,6 @@ fun dPackage(
 )
 
 fun documentationNode(vararg texts: String): DocumentationNode {
-    return DocumentationNode(texts.toList().map { Description(Text(it)) })
+    return DocumentationNode(texts.toList().map { Description(RootDocTag(listOf(Text(it)))) })
 }
 

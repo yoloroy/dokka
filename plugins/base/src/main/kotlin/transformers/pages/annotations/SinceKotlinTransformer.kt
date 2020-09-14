@@ -3,6 +3,7 @@ package org.jetbrains.dokka.base.transformers.pages.annotations
 import org.jetbrains.dokka.links.DRI
 import org.jetbrains.dokka.model.*
 import org.jetbrains.dokka.model.doc.CustomTagWrapper
+import org.jetbrains.dokka.model.doc.RootDocTag
 import org.jetbrains.dokka.model.doc.Text
 import org.jetbrains.dokka.model.properties.WithExtraProperties
 import org.jetbrains.dokka.plugability.DokkaContext
@@ -73,7 +74,15 @@ class SinceKotlinTransformer(val context: DokkaContext) : DocumentableTransforme
                 acc.mapValues {
                     if (it.key == sourceSet) it.value.copy(
                         it.value.children + listOf(
-                            CustomTagWrapper(Text(version.dropWhile { it == '"' }.dropLastWhile { it == '"' }), "Since Kotlin")
+                            CustomTagWrapper(
+                                RootDocTag(
+                                    listOf(
+                                        Text(version.dropWhile { it == '"' }.dropLastWhile { it == '"' }
+                                        )
+                                    )
+                                ),
+                                "Since Kotlin"
+                            )
                         )
                     ) else it.value
                 }

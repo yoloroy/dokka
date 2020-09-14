@@ -14,27 +14,37 @@ abstract class Parser {
 
         val mappedList: List<TagWrapper> = list.map {
             when (it.first) {
-                "description" -> Description(parseStringToDocNode(it.second))
-                "author" -> Author(parseStringToDocNode(it.second))
-                "version" -> Version(parseStringToDocNode(it.second))
-                "since" -> Since(parseStringToDocNode(it.second))
-                "see" -> See(parseStringToDocNode(it.second.substringAfter(' ')), it.second.substringBefore(' '), null)
-                "param" -> Param(parseStringToDocNode(it.second.substringAfter(' ')), it.second.substringBefore(' '))
+                "description" -> Description(parseStringToDocNode(it.second) as RootDocTag)
+                "author" -> Author(parseStringToDocNode(it.second) as RootDocTag)
+                "version" -> Version(parseStringToDocNode(it.second) as RootDocTag)
+                "since" -> Since(parseStringToDocNode(it.second) as RootDocTag)
+                "see" -> See(
+                    parseStringToDocNode(it.second.substringAfter(' ')) as RootDocTag,
+                    it.second.substringBefore(' '),
+                    null
+                )
+                "param" -> Param(
+                    parseStringToDocNode(it.second.substringAfter(' ')) as RootDocTag,
+                    it.second.substringBefore(' ')
+                )
                 "property" -> Property(
-                    parseStringToDocNode(it.second.substringAfter(' ')),
+                    parseStringToDocNode(it.second.substringAfter(' ')) as RootDocTag,
                     it.second.substringBefore(' ')
                 )
-                "return" -> Return(parseStringToDocNode(it.second))
-                "constructor" -> Constructor(parseStringToDocNode(it.second))
-                "receiver" -> Receiver(parseStringToDocNode(it.second))
+                "return" -> Return(parseStringToDocNode(it.second) as RootDocTag)
+                "constructor" -> Constructor(parseStringToDocNode(it.second) as RootDocTag)
+                "receiver" -> Receiver(parseStringToDocNode(it.second) as RootDocTag)
                 "throws", "exception" -> Throws(
-                    parseStringToDocNode(it.second.substringAfter(' ')),
+                    parseStringToDocNode(it.second.substringAfter(' ')) as RootDocTag,
                     it.second.substringBefore(' ')
                 )
-                "deprecated" -> Deprecated(parseStringToDocNode(it.second))
-                "sample" -> Sample(parseStringToDocNode(it.second.substringAfter(' ')), it.second.substringBefore(' '))
-                "suppress" -> Suppress(parseStringToDocNode(it.second))
-                else -> CustomTagWrapper(parseStringToDocNode(it.second), it.first)
+                "deprecated" -> Deprecated(parseStringToDocNode(it.second) as RootDocTag)
+                "sample" -> Sample(
+                    parseStringToDocNode(it.second.substringAfter(' ')) as RootDocTag,
+                    it.second.substringBefore(' ')
+                )
+                "suppress" -> Suppress(parseStringToDocNode(it.second) as RootDocTag)
+                else -> CustomTagWrapper(parseStringToDocNode(it.second) as RootDocTag, it.first)
             }
         }
         return DocumentationNode(mappedList)

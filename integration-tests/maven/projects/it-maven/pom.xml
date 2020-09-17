@@ -123,6 +123,14 @@
 
                     <!-- Disable linking to online JDK documentation -->
                     <noJdkLink>false</noJdkLink>
+                    <customAssets>
+                        <dir>${project.basedir}/customResources/custom-resource.svg</dir>
+                    </customAssets>
+
+                    <customStylesheets>
+                        <dir>${project.basedir}/customResources/logo-styles.css</dir>
+                        <dir>${project.basedir}/customResources/custom-style-to-add.css</dir>
+                    </customStylesheets>
 
                     <!-- Allows to customize documentation generation options on a per-package basis -->
                     <perPackageOptions>

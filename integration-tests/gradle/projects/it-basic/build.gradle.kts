@@ -40,4 +40,6 @@ tasks.withType<DokkaTask> {
             kotlinSourceSet(kotlin.sourceSets["test"])
         }
     }
+    customStyleSheets.set(listOf(file("customResources/logo-styles.css"), file("customResources/custom-style-to-add.css")))
+    customAssets.set(listOf(file("customResources/custom-resource.svg")))
 }

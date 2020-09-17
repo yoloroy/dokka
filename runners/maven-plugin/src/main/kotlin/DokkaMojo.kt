@@ -162,6 +162,12 @@ abstract class AbstractDokkaMojo(private val defaultDokkaPlugins: List<Dependenc
     var dokkaPlugins: List<Dependency> = emptyList()
         get() = field + defaultDokkaPlugins
 
+    @Parameter
+    var customAssets = DokkaDefaults.customAssets
+
+    @Parameter
+    var customStylesheets = DokkaDefaults.customStylesheets
+
     protected abstract fun getOutDir(): String
 
     override fun execute() {
@@ -235,7 +241,9 @@ abstract class AbstractDokkaMojo(private val defaultDokkaPlugins: List<Dependenc
                         .flatten(),
             pluginsConfiguration = mutableMapOf(), //TODO implement as it is in Gradle
             modules = emptyList(),
-            failOnWarning = failOnWarning
+            failOnWarning = failOnWarning,
+            customAssets = customAssets,
+            customStyleSheets = customStylesheets
         )
 
         val gen = DokkaGenerator(configuration, logger)

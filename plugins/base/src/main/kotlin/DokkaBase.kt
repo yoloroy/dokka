@@ -198,12 +198,12 @@ class DokkaBase : DokkaPlugin() {
         htmlPreprocessors with NavigationPageInstaller order { after(rootCreator) }
     }
 
-    val searchPageInstaller by extending {
-        htmlPreprocessors with SearchPageInstaller order { after(rootCreator) }
-    }
-
     val resourceInstaller by extending {
         htmlPreprocessors with ResourceInstaller order { after(rootCreator) }
+    }
+
+    val customResourceInstaller by extending {
+        htmlPreprocessors providing { ctx -> CustomResourceInstaller(ctx.configuration) } order { after(resourceInstaller) }
     }
 
     val styleAndScriptsAppender by extending {

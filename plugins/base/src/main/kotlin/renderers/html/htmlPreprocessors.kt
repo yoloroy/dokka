@@ -7,6 +7,7 @@ import kotlinx.html.h1
 import kotlinx.html.id
 import kotlinx.html.table
 import kotlinx.html.tbody
+import org.jetbrains.dokka.DokkaConfiguration
 import org.jetbrains.dokka.base.renderers.sourceSets
 import org.jetbrains.dokka.links.DRI
 import org.jetbrains.dokka.model.DEnum
@@ -15,28 +16,6 @@ import org.jetbrains.dokka.model.withDescendants
 import org.jetbrains.dokka.pages.*
 import org.jetbrains.dokka.plugability.DokkaContext
 import org.jetbrains.dokka.transformers.pages.PageTransformer
-
-
-object SearchPageInstaller : PageTransformer {
-    override fun invoke(input: RootPageNode) = input.modified(children = input.children + searchPage)
-
-    private val searchPage = RendererSpecificResourcePage(
-        name = "Search",
-        children = emptyList(),
-        strategy = RenderingStrategy<HtmlRenderer> {
-            buildHtml(it, listOf("styles/style.css", "scripts/pages.js", "scripts/search.js")) {
-                h1 {
-                    id = "searchTitle"
-                    text("Search results for ")
-                }
-                table {
-                    tbody {
-                        id = "searchTable"
-                    }
-                }
-            }
-        })
-}
 
 object NavigationPageInstaller : PageTransformer {
     private val mapper = jacksonObjectMapper()
@@ -88,10 +67,49 @@ object NavigationPageInstaller : PageTransformer {
         }.sortedBy { it.name.toLowerCase() }
 }
 
-object ResourceInstaller : PageTransformer {
-    override fun invoke(input: RootPageNode) = input.modified(children = input.children + resourcePages)
+class CustomResourceInstaller(val dokkaConfiguration: DokkaConfiguration) : PageTransformer {
+    private val customAssets = dokkaConfiguration.customAssets.map {
+        RendererSpecificResourcePage("images/${it.name}", emptyList(), RenderingStrategy.Copy(it.absolutePath))
+    }
 
-    private val resourcePages = listOf("styles", "scripts", "images").map {
+    private val customStylesheets = dokkaConfiguration.customStyleSheets.map {
+        RendererSpecificResourcePage("styles/${it.name}", emptyList(), RenderingStrategy.Copy(it.absolutePath))
+    }
+
+    override fun invoke(input: RootPageNode): RootPageNode {
+        val customResourcesPaths = (customAssets + customStylesheets).map { it.name }.toSet()
+        val withEmbeddedResources = input.transformContentPagesTree { it.modified(embeddedResources = it.embeddedResources + customResourcesPaths) }
+        val (currentResources, otherPages) = withEmbeddedResources.children.partition { it is RendererSpecificResourcePage }
+        return input.modified(children = otherPages + currentResources.filterNot { it.name in customResourcesPaths } + customAssets + customStylesheets)
+    }
+}
+
+object ResourceInstaller : PageTransformer {
+    override fun invoke(input: RootPageNode) =
+        input.modified(children = input.children + resourcePages).transformContentPagesTree { page ->
+            page.modified(
+                embeddedResources = page.embeddedResources + scriptsPages + stylesPages
+            )
+        }
+
+    val stylesPages = listOf(
+        "styles/style.css",
+        "styles/logo-styles.css",
+        "styles/jetbrains-mono.css"
+    )
+    val scriptsPages = listOf(
+        "scripts/clipboard.js",
+        "scripts/navigation-loader.js",
+        "scripts/platform-content-handler.js",
+        "scripts/main.js"
+    )
+    val imagesPages = listOf(
+        "images/arrow_down.svg",
+        "images/docs_logo.svg",
+        "images/logo-icon.svg"
+    )
+
+    private val resourcePages = (stylesPages + scriptsPages + imagesPages).map {
         RendererSpecificResourcePage(it, emptyList(), RenderingStrategy.Copy("/dokka/$it"))
     }
 }
@@ -100,12 +118,7 @@ object StyleAndScriptsAppender : PageTransformer {
     override fun invoke(input: RootPageNode) = input.transformContentPagesTree {
         it.modified(
             embeddedResources = it.embeddedResources + listOf(
-                "styles/style.css",
-                "scripts/navigationLoader.js",
-                "scripts/platformContentHandler.js",
                 "scripts/sourceset_dependencies.js",
-                "scripts/clipboard.js",
-                "styles/jetbrains-mono.css"
             )
         )
     }

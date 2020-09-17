@@ -6,6 +6,7 @@ import org.gradle.api.tasks.Internal
 import org.gradle.api.tasks.Nested
 import org.jetbrains.dokka.DokkaBootstrapImpl
 import org.jetbrains.dokka.DokkaConfigurationImpl
+import org.jetbrains.dokka.DokkaDefaults
 import org.jetbrains.dokka.build
 
 abstract class DokkaTask : AbstractDokkaTask(DokkaBootstrapImpl::class) {
@@ -44,7 +45,9 @@ abstract class DokkaTask : AbstractDokkaTask(DokkaBootstrapImpl::class) {
             failOnWarning = failOnWarning.getSafe(),
             sourceSets = unsuppressedSourceSets.build(),
             pluginsConfiguration = pluginsConfiguration.getSafe(),
-            pluginsClasspath = plugins.resolve().toList()
+            pluginsClasspath = plugins.resolve().toList(),
+            customAssets = customAssets.getSafe() ?: DokkaDefaults.customAssets,
+            customStyleSheets = customStyleSheets.getSafe() ?: DokkaDefaults.customStylesheets
         )
     }
 }

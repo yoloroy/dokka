@@ -516,6 +516,7 @@ open class HtmlRenderer(
         a {
             attributes["data-name"] = anchor
             attributes["anchor-label"] = anchorLabel
+            attributes["id"] = anchor
         }
         content()
     }

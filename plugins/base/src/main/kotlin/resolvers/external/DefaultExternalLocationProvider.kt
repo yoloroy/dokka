@@ -18,7 +18,7 @@ open class DefaultExternalLocationProvider(
         val classLink = (listOfNotNull(dri.packageName) + classNamesChecked.split('.'))
             .joinToString("/", transform = ::identifierToFilename)
 
-        val callableChecked = dri.callable ?: return "$docURL$classLink/index$extension"
-        return "$docURL$classLink/" + identifierToFilename(callableChecked.name) + extension
+        val fileName = dri.callable?.let { identifierToFilename(it.name) } ?: "index"
+        return "$docURL$classLink/$fileName$extension"
     }
 }

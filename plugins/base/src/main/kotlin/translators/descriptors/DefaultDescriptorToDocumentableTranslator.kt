@@ -3,6 +3,7 @@ package org.jetbrains.dokka.base.translators.descriptors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withContext
 import org.jetbrains.dokka.DokkaConfiguration.DokkaSourceSet
 import org.jetbrains.dokka.analysis.DescriptorDocumentableSource
 import org.jetbrains.dokka.analysis.DokkaResolutionFacade
@@ -20,6 +21,7 @@ import org.jetbrains.dokka.plugability.DokkaContext
 import org.jetbrains.dokka.transformers.sources.SourceToDocumentableTranslator
 import org.jetbrains.dokka.utilities.DokkaLogger
 import org.jetbrains.dokka.utilities.parallelMap
+import org.jetbrains.dokka.utilities.parallelMapNotNull
 import org.jetbrains.kotlin.builtins.isExtensionFunctionType
 import org.jetbrains.kotlin.builtins.isFunctionType
 import org.jetbrains.kotlin.codegen.isJvmStaticInObjectOrClassOrInterface
@@ -624,18 +626,19 @@ private class DokkaDescriptorVisitor(
             ))
         )
 
-    private fun MemberScope.getContributedDescriptors(kindFilter: DescriptorKindFilter, shouldFilter: Boolean) =
-        getContributedDescriptors(kindFilter) { true }.let {
+    private suspend fun MemberScope.getContributedDescriptors(kindFilter: DescriptorKindFilter, shouldFilter: Boolean) =
+        withContext(Dispatchers.IO) { getContributedDescriptors(kindFilter) { true } }.let {
             if (shouldFilter) it.filterDescriptorsInSourceSet() else it
         }
 
     private suspend fun MemberScope.functions(
         parent: DRIWithPlatformInfo,
         packageLevel: Boolean = false
-    ): List<DFunction> =
+    ): List<DFunction> = coroutineScope {
         getContributedDescriptors(DescriptorKindFilter.FUNCTIONS, packageLevel)
             .filterIsInstance<FunctionDescriptor>()
             .parallelMap { visitFunctionDescriptor(it, parent) }
+    }
 
     private suspend fun MemberScope.properties(
         parent: DRIWithPlatformInfo,
@@ -668,7 +671,7 @@ private class DokkaDescriptorVisitor(
             .parallelMap { enumEntryDescriptor(it, parent) }
 
 
-    private fun DeclarationDescriptor.resolveDescriptorData(): SourceSetDependent<DocumentationNode> =
+    private suspend fun DeclarationDescriptor.resolveDescriptorData(): SourceSetDependent<DocumentationNode> =
         getDocumentation()?.toSourceSetDependent() ?: emptyMap()
 
     private suspend fun toTypeConstructor(kt: KotlinType) =
@@ -762,7 +765,9 @@ private class DokkaDescriptorVisitor(
             org.jetbrains.kotlin.types.Variance.OUT_VARIANCE -> Covariance(this)
         }
 
-    private fun DeclarationDescriptor.getDocumentation() = findKDoc().let {
+    private suspend fun DeclarationDescriptor.getDocumentation() = withContext(Dispatchers.IO) {
+        findKDoc()
+    }.let {
         MarkdownParser(resolutionFacade, this, logger).parseFromKDocTag(it)
     }.takeIf { it.children.isNotEmpty() }
 
@@ -820,7 +825,9 @@ private class DokkaDescriptorVisitor(
         ExtraModifiers.KotlinOnlyModifiers.Override.takeIf { DescriptorUtils.isOverride(this) }
     )
 
-    private suspend fun Annotated.getAnnotations() = annotations.mapNotNull { it.toAnnotation() }
+    private suspend fun Annotated.getAnnotations() = withContext(Dispatchers.IO) {
+        annotations
+    }.parallelMapNotNull { it.toAnnotation() }
 
     private suspend fun ConstantValue<*>.toValue(): AnnotationParameterValue? = when (this) {
         is ConstantsAnnotationValue -> value.toAnnotation()?.let { AnnotationValue(it) }

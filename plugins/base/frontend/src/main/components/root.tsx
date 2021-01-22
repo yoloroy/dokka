@@ -1,55 +1,47 @@
 import React from 'react';
-import {render} from 'react-dom';
-import RedBox from 'redbox-react';
+import { render } from 'react-dom';
+import _ from "lodash";
 
 import App from "./app";
 import './app/index.scss';
 import { NavigationPaneSearch } from './navigationPaneSearch/navigationPaneSearch';
-
-const appEl = document.getElementById('searchBar');
-const rootEl = document.createElement('div');
+import { PageSummary } from './pageSummary/pageSummary';
 
 const renderNavigationPane = () => {
-  const element = document.getElementById('paneSearch')
-  if(element){
-    render(
-        <NavigationPaneSearch />,
-        document.getElementById('paneSearch')
-    )
+  render(
+    <NavigationPaneSearch />,
+    document.getElementById('paneSearch')
+  )
+}
+
+const renderOnThisPage = () => {
+  for (const e of document.querySelectorAll('.tabs-section-body > div[data-togglable]')) {
+    const entries = Array.from(e.querySelectorAll('a[anchor-label]')).map((element: HTMLElement) => {
+      return {
+        location: element.getAttribute('data-name'),
+        label: element.getAttribute('anchor-label'),
+        sourceSets: _.sortBy(element.getAttribute('data-filterable-set').split(' '))
+      }
+    })
+    const unique = _.uniqBy(entries, ({label}) => label)
+    if (unique.length) {
+      const element = document.createElement('div')
+      render(<PageSummary entries={unique} containerId={'main'} offsetComponentId={'navigation-wrapper'}/>, element)
+      e.appendChild(element)
+    }
   }
 }
 
-let renderApp = () => {
-  render(
-      <App/>,
-      rootEl
-  );
-  renderNavigationPane();
-};
-
-// @ts-ignore
-if (module.hot) {
-  const renderAppHot = renderApp;
-  const renderError = (error: Error) => {
-    render(
-        <RedBox error={error}/>,
-        rootEl
-    );
-  };
-
-  renderApp = () => {
-    try {
-      renderAppHot();
-    } catch (error) {
-      renderError(error);
-    }
-  };
-
-  // @ts-ignore
-  module.hot.accept('./app', () => {
-    setTimeout(renderApp);
-  });
+const renderMainSearch = () => {
+  render(<App />, document.getElementById('searchBar'));
 }
 
-renderApp();
-appEl!.appendChild(rootEl);
+let renderApp = () => {
+  renderMainSearch();
+  renderNavigationPane();
+  renderOnThisPage();
+
+  document.removeEventListener('DOMContentLoaded', renderApp);
+};
+
+document.addEventListener('DOMContentLoaded', renderApp);

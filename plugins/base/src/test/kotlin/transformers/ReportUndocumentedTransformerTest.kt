@@ -2,13 +2,13 @@ package transformers
 
 import org.jetbrains.dokka.PackageOptionsImpl
 import org.jetbrains.dokka.Platform
-import org.jetbrains.dokka.testApi.testRunner.AbstractCoreTest
+import org.jetbrains.dokka.base.testApi.testRunner.BaseAbstractTest
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 
 
-class ReportUndocumentedTransformerTest : AbstractCoreTest() {
+class ReportUndocumentedTransformerTest : BaseAbstractTest() {
     @Test
     fun `undocumented class gets reported`() {
         val configuration = dokkaConfiguration {
@@ -380,7 +380,7 @@ class ReportUndocumentedTransformerTest : AbstractCoreTest() {
             sourceSets {
                 sourceSet {
                     perPackageOptions += packageOptions(
-                        prefix = "sample",
+                        matchingRegex = "sample.*",
                         reportUndocumented = true,
                     )
                     reportUndocumented = false
@@ -410,11 +410,11 @@ class ReportUndocumentedTransformerTest : AbstractCoreTest() {
             sourceSets {
                 sourceSet {
                     perPackageOptions += packageOptions(
-                        prefix = "sample",
+                        matchingRegex = "sample.*",
                         reportUndocumented = false,
                     )
                     perPackageOptions += packageOptions(
-                        prefix = "sample.enabled",
+                        matchingRegex = "sample.enabled.*",
                         reportUndocumented = true,
                     )
                     reportUndocumented = false
@@ -448,11 +448,11 @@ class ReportUndocumentedTransformerTest : AbstractCoreTest() {
             sourceSets {
                 sourceSet {
                     perPackageOptions += packageOptions(
-                        prefix = "sample",
+                        matchingRegex = "sample.*",
                         reportUndocumented = true,
                     )
                     perPackageOptions += packageOptions(
-                        prefix = "sample.disabled",
+                        matchingRegex = "sample.disabled.*",
                         reportUndocumented = false,
                     )
                     reportUndocumented = true
@@ -904,13 +904,13 @@ class ReportUndocumentedTransformerTest : AbstractCoreTest() {
     }
 
     private fun packageOptions(
-        prefix: String,
+        matchingRegex: String,
         reportUndocumented: Boolean?,
         includeNonPublic: Boolean = true,
         skipDeprecated: Boolean = false,
         suppress: Boolean = false
     ) = PackageOptionsImpl(
-        prefix = prefix,
+        matchingRegex = matchingRegex,
         reportUndocumented = reportUndocumented,
         includeNonPublic = includeNonPublic,
         skipDeprecated = skipDeprecated,

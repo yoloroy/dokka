@@ -14,8 +14,10 @@ data class PackageList(
             if (offlineMode && url.protocol.toLowerCase() != "file")
                 return null
 
-            val packageListStream = url.readContent()
-
+            val packageListStream = kotlin.runCatching { url.readContent() }.onFailure {
+                println("Failed to download package-list from $url")
+                return null
+            }.getOrThrow()
 
             val (params, packages) = packageListStream
                 .bufferedReader()
@@ -23,11 +25,10 @@ data class PackageList(
 
             val paramsMap = splitParams(params)
             val format = linkFormat(paramsMap["format"]?.singleOrNull(), jdkVersion)
-            val locations = splitLocations(paramsMap["location"].orEmpty())
+            val locations = splitLocations(paramsMap["location"].orEmpty()).filterKeys(String::isNotEmpty)
 
-            return PackageList(format, packages.toSet(), locations, url)
+            return PackageList(format, packages.filter(String::isNotBlank).toSet(), locations, url)
         }
-
 
         private fun splitParams(params: List<String>) = params.asSequence()
             .map { it.removePrefix("${PackageListService.DOKKA_PARAM_PREFIX}.").split(":", limit = 2) }

@@ -4,14 +4,14 @@ import matchers.content.*
 import org.jetbrains.dokka.links.DRI
 import org.jetbrains.dokka.model.doc.Text
 import org.jetbrains.dokka.pages.*
-import org.jetbrains.dokka.testApi.testRunner.AbstractCoreTest
+import org.jetbrains.dokka.base.testApi.testRunner.BaseAbstractTest
 import org.junit.jupiter.api.Test
 import utils.ParamAttributes
 import utils.bareSignature
 import utils.propertySignature
 import utils.typealiasSignature
 
-class ContentForSignaturesTest : AbstractCoreTest() {
+class ContentForSignaturesTest : BaseAbstractTest() {
 
     private val testConfiguration = dokkaConfiguration {
         sourceSets {
@@ -310,7 +310,7 @@ class ContentForSignaturesTest : AbstractCoreTest() {
             pagesTransformationStage = { module ->
                 val page = module.children.single { it.name == "test" } as PackagePageNode
                 page.content.assertNode {
-                    propertySignature(emptyMap(), "", "", emptySet(), "val", "property", "Int")
+                    propertySignature(emptyMap(), "", "", emptySet(), "val", "property", "Int", "6")
                 }
             }
         }
@@ -329,7 +329,7 @@ class ContentForSignaturesTest : AbstractCoreTest() {
             pagesTransformationStage = { module ->
                 val page = module.children.single { it.name == "test" } as PackagePageNode
                 page.content.assertNode {
-                    propertySignature(emptyMap(), "", "", setOf("const"), "val", "property", "Int")
+                    propertySignature(emptyMap(), "", "", setOf("const"), "val", "property", "Int", "6")
                 }
             }
         }
@@ -348,7 +348,7 @@ class ContentForSignaturesTest : AbstractCoreTest() {
             pagesTransformationStage = { module ->
                 val page = module.children.single { it.name == "test" } as PackagePageNode
                 page.content.assertNode {
-                    propertySignature(emptyMap(), "protected", "", emptySet(), "val", "property", "Int")
+                    propertySignature(emptyMap(), "protected", "", emptySet(), "val", "property", "Int", "6")
                 }
             }
         }
@@ -367,7 +367,7 @@ class ContentForSignaturesTest : AbstractCoreTest() {
             pagesTransformationStage = { module ->
                 val page = module.children.single { it.name == "test" } as PackagePageNode
                 page.content.assertNode {
-                    propertySignature(emptyMap(), "protected", "", setOf("lateinit"), "var", "property", "Int")
+                    propertySignature(emptyMap(), "protected", "", setOf("lateinit"), "var", "property", "Int", "6")
                 }
             }
         }

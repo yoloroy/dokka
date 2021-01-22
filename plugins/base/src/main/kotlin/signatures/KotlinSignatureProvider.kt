@@ -2,6 +2,7 @@ package org.jetbrains.dokka.base.signatures
 
 import org.jetbrains.dokka.DokkaConfiguration.DokkaSourceSet
 import org.jetbrains.dokka.Platform
+import org.jetbrains.dokka.base.DokkaBase
 import org.jetbrains.dokka.base.signatures.KotlinSignatureUtils.dri
 import org.jetbrains.dokka.base.signatures.KotlinSignatureUtils.driOrNull
 import org.jetbrains.dokka.base.transformers.pages.comments.CommentsToContentConverter
@@ -14,11 +15,18 @@ import org.jetbrains.dokka.model.properties.WithExtraProperties
 import org.jetbrains.dokka.pages.ContentKind
 import org.jetbrains.dokka.pages.ContentNode
 import org.jetbrains.dokka.pages.TextStyle
+import org.jetbrains.dokka.plugability.DokkaContext
+import org.jetbrains.dokka.plugability.plugin
+import org.jetbrains.dokka.plugability.querySingle
 import org.jetbrains.dokka.utilities.DokkaLogger
 import kotlin.text.Typography.nbsp
 
-class KotlinSignatureProvider(ctcc: CommentsToContentConverter, logger: DokkaLogger) : SignatureProvider,
-    JvmSignatureUtils by KotlinSignatureUtils {
+class KotlinSignatureProvider(ctcc: CommentsToContentConverter, logger: DokkaLogger)
+    : SignatureProvider, JvmSignatureUtils by KotlinSignatureUtils {
+    constructor(context: DokkaContext) : this(
+        context.plugin<DokkaBase>().querySingle { commentsToContentConverter },
+        context.logger
+    )
     private val contentBuilder = PageContentBuilder(ctcc, this, logger)
 
     private val ignoredVisibilities = setOf(JavaVisibility.Public, KotlinVisibility.Public)
@@ -63,7 +71,7 @@ class KotlinSignatureProvider(ctcc: CommentsToContentConverter, logger: DokkaLog
             contentBuilder.contentFor(
                 e,
                 ContentKind.Symbol,
-                setOf(TextStyle.Monospace, TextStyle.Block) + e.stylesIfDeprecated(it),
+                setOf(TextStyle.Monospace) + e.stylesIfDeprecated(it),
                 sourceSets = setOf(it)
             ) {
                 group(styles = setOf(TextStyle.Block)) {
@@ -279,14 +287,15 @@ class KotlinSignatureProvider(ctcc: CommentsToContentConverter, logger: DokkaLog
 
     private fun signature(t: DTypeAlias) =
         t.sourceSets.map {
-            contentBuilder.contentFor(t, styles = t.stylesIfDeprecated(it), sourceSets = setOf(it)) {
+            contentBuilder.contentFor(t, sourceSets = setOf(it)) {
                 t.underlyingType.entries.groupBy({ it.value }, { it.key }).map { (type, platforms) ->
                     +contentBuilder.contentFor(
                         t,
                         ContentKind.Symbol,
-                        setOf(TextStyle.Monospace),
+                        setOf(TextStyle.Monospace) + t.stylesIfDeprecated(it),
                         sourceSets = platforms.toSet()
                     ) {
+                        annotationsBlock(t)
                         text(t.visibility[it]?.takeIf { it !in ignoredVisibilities }?.name?.let { "$it " } ?: "")
                         processExtraModifiers(t)
                         text("typealias ")

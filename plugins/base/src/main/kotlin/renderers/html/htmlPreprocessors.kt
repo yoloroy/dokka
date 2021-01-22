@@ -1,78 +1,24 @@
 package org.jetbrains.dokka.base.renderers.html
 
-import com.fasterxml.jackson.databind.annotation.JsonSerialize
-import com.fasterxml.jackson.databind.ser.std.ToStringSerializer
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
-import kotlinx.html.h1
-import kotlinx.html.id
-import kotlinx.html.table
-import kotlinx.html.tbody
+import org.jetbrains.dokka.base.DokkaBase
+import org.jetbrains.dokka.base.DokkaBaseConfiguration
 import org.jetbrains.dokka.base.renderers.sourceSets
+import org.jetbrains.dokka.base.templating.AddToSearch
 import org.jetbrains.dokka.links.DRI
-import org.jetbrains.dokka.model.DEnum
-import org.jetbrains.dokka.model.DEnumEntry
-import org.jetbrains.dokka.model.withDescendants
+import org.jetbrains.dokka.model.*
 import org.jetbrains.dokka.pages.*
 import org.jetbrains.dokka.plugability.DokkaContext
+import org.jetbrains.dokka.plugability.configuration
 import org.jetbrains.dokka.transformers.pages.PageTransformer
 
+abstract class NavigationDataProvider {
+    open fun navigableChildren(input: RootPageNode): NavigationNode =
+        input.children.filterIsInstance<ContentPage>().single().let { visit(it) }
 
-object SearchPageInstaller : PageTransformer {
-    override fun invoke(input: RootPageNode) = input.modified(children = input.children + searchPage)
-
-    private val searchPage = RendererSpecificResourcePage(
-        name = "Search",
-        children = emptyList(),
-        strategy = RenderingStrategy<HtmlRenderer> {
-            buildHtml(it, listOf("styles/style.css", "scripts/pages.js", "scripts/search.js")) {
-                h1 {
-                    id = "searchTitle"
-                    text("Search results for ")
-                }
-                table {
-                    tbody {
-                        id = "searchTable"
-                    }
-                }
-            }
-        })
-}
-
-object NavigationPageInstaller : PageTransformer {
-    private val mapper = jacksonObjectMapper()
-
-    private data class NavigationNodeView(
-        val name: String,
-        val label: String = name,
-        val searchKey: String = name,
-        @get:JsonSerialize(using = ToStringSerializer::class) val dri: DRI,
-        val location: String
-    ) {
-        companion object {
-            fun from(node: NavigationNode, location: String): NavigationNodeView =
-                NavigationNodeView(name = node.name, dri = node.dri, location = location)
-        }
-    }
-
-    override fun invoke(input: RootPageNode): RootPageNode {
-        val nodes = input.children.filterIsInstance<ContentPage>().single()
-            .let(NavigationPageInstaller::visit)
-
-        val page = RendererSpecificResourcePage(
-            name = "scripts/navigation-pane.json",
-            children = emptyList(),
-            strategy = RenderingStrategy.LocationResolvableWrite { resolver ->
-                mapper.writeValueAsString(nodes.withDescendants().map { NavigationNodeView.from(it, resolver(it.dri, it.sourceSets)) })
-            })
-
-        return input.modified(
-            children = input.children + page + NavigationPage(nodes)
-        )
-    }
-
-    private fun visit(page: ContentPage): NavigationNode =
+    open fun visit(page: ContentPage): NavigationNode =
         NavigationNode(
-            name = page.name,
+            name = page.displayableName,
             dri = page.dri.first(),
             sourceSets = page.sourceSets(),
             children = page.navigableChildren()
@@ -86,55 +32,160 @@ object NavigationPageInstaller : PageTransformer {
                 children.filter { it is ContentPage && it.documentable is DEnumEntry }.map { visit(it as ContentPage) }
             else -> emptyList()
         }.sortedBy { it.name.toLowerCase() }
+
+    private val ContentPage.displayableName: String
+        get() = if (documentable is DFunction) {
+            "$name()"
+        } else {
+            name
+        }
 }
 
-object ResourceInstaller : PageTransformer {
-    override fun invoke(input: RootPageNode) = input.modified(children = input.children + resourcePages)
+open class NavigationSearchInstaller(val context: DokkaContext) : NavigationDataProvider(), PageTransformer {
+    private val mapper = jacksonObjectMapper()
 
-    private val resourcePages = listOf("styles", "scripts", "images").map {
-        RendererSpecificResourcePage(it, emptyList(), RenderingStrategy.Copy("/dokka/$it"))
+    open fun createSearchRecordFromNode(node: NavigationNode, location: String): SearchRecord =
+        SearchRecord(name = node.name, location = location)
+
+    override fun invoke(input: RootPageNode): RootPageNode {
+        val page = RendererSpecificResourcePage(
+            name = "scripts/navigation-pane.json",
+            children = emptyList(),
+            strategy = RenderingStrategy.DriLocationResolvableWrite { resolver ->
+                val content = navigableChildren(input).withDescendants().map {
+                    createSearchRecordFromNode(it, resolveLocation(resolver, it.dri, it.sourceSets).orEmpty())
+                }
+                if (context.configuration.delayTemplateSubstitution) {
+                    mapper.writeValueAsString(AddToSearch(context.configuration.moduleName, content.toList()))
+                } else {
+                    mapper.writeValueAsString(content)
+                }
+            })
+
+        return input.modified(children = input.children + page)
     }
+
+    private fun resolveLocation(locationResolver: DriResolver, dri: DRI, sourceSets: Set<DisplaySourceSet>): String? =
+        locationResolver(dri, sourceSets).also { location ->
+            if (location.isNullOrBlank()) context.logger.warn("Cannot resolve path for $dri and sourceSets: ${sourceSets.joinToString { it.name }}")
+        }
+
 }
 
-object StyleAndScriptsAppender : PageTransformer {
-    override fun invoke(input: RootPageNode) = input.transformContentPagesTree {
-        it.modified(
-            embeddedResources = it.embeddedResources + listOf(
-                "styles/style.css",
-                "scripts/navigationLoader.js",
-                "scripts/platformContentHandler.js",
-                "scripts/sourceset_dependencies.js",
-                "scripts/clipboard.js",
-                "styles/jetbrains-mono.css"
+open class NavigationPageInstaller(val context: DokkaContext) : NavigationDataProvider(), PageTransformer {
+
+    override fun invoke(input: RootPageNode): RootPageNode =
+        input.modified(
+            children = input.children + NavigationPage(
+                root = navigableChildren(input),
+                moduleName = context.configuration.moduleName,
+                context = context
             )
         )
+}
+
+class CustomResourceInstaller(val dokkaContext: DokkaContext) : PageTransformer {
+    private val configuration = configuration<DokkaBase, DokkaBaseConfiguration>(dokkaContext)
+
+    private val customAssets = configuration?.customAssets?.map {
+        RendererSpecificResourcePage("images/${it.name}", emptyList(), RenderingStrategy.Copy(it.absolutePath))
+    }.orEmpty()
+
+    private val customStylesheets = configuration?.customStyleSheets?.map {
+        RendererSpecificResourcePage("styles/${it.name}", emptyList(), RenderingStrategy.Copy(it.absolutePath))
+    }.orEmpty()
+
+    override fun invoke(input: RootPageNode): RootPageNode {
+        val customResourcesPaths = (customAssets + customStylesheets).map { it.name }.toSet()
+        val withEmbeddedResources =
+            input.transformContentPagesTree { it.modified(embeddedResources = it.embeddedResources + customResourcesPaths) }
+        val (currentResources, otherPages) = withEmbeddedResources.children.partition { it is RendererSpecificResourcePage }
+        return input.modified(children = otherPages + currentResources.filterNot { it.name in customResourcesPaths } + customAssets + customStylesheets)
     }
 }
 
+object ScriptsInstaller : PageTransformer {
+    private val scriptsPages = listOf(
+        "scripts/clipboard.js",
+        "scripts/navigation-loader.js",
+        "scripts/platform-content-handler.js",
+        "scripts/main.js",
+    )
+
+    override fun invoke(input: RootPageNode): RootPageNode {
+        return input.modified(
+            children = input.children + scriptsPages.toRenderSpecificResourcePage()
+        ).transformContentPagesTree {
+            it.modified(
+                embeddedResources = it.embeddedResources + scriptsPages
+            )
+        }
+    }
+}
+
+object StylesInstaller : PageTransformer {
+    private val stylesPages = listOf(
+        "styles/style.css",
+        "styles/logo-styles.css",
+        "styles/jetbrains-mono.css",
+        "styles/main.css"
+    )
+
+    override fun invoke(input: RootPageNode): RootPageNode =
+        input.modified(
+            children = input.children + stylesPages.toRenderSpecificResourcePage()
+        ).transformContentPagesTree {
+            it.modified(
+                embeddedResources = it.embeddedResources + stylesPages
+            )
+        }
+}
+
+object AssetsInstaller : PageTransformer {
+    private val imagesPages = listOf(
+        "images/arrow_down.svg",
+        "images/docs_logo.svg",
+        "images/logo-icon.svg",
+        "images/go-to-top-icon.svg",
+        "images/footer-go-to-link.svg",
+        "images/anchor-copy-button.svg",
+        "images/copy-icon.svg",
+        "images/copy-successful-icon.svg",
+    )
+
+    override fun invoke(input: RootPageNode) = input.modified(
+        children = input.children + imagesPages.toRenderSpecificResourcePage()
+    )
+}
+
+private fun List<String>.toRenderSpecificResourcePage(): List<RendererSpecificResourcePage> =
+    map { RendererSpecificResourcePage(it, emptyList(), RenderingStrategy.Copy("/dokka/$it")) }
+
 class SourcesetDependencyAppender(val context: DokkaContext) : PageTransformer {
+    private val name = "scripts/sourceset_dependencies.js"
     override fun invoke(input: RootPageNode): RootPageNode {
         val dependenciesMap = context.configuration.sourceSets.map {
             it.sourceSetID to it.dependentSourceSets
         }.toMap()
 
         fun createDependenciesJson(): String = "sourceset_dependencies = '{${
-        dependenciesMap.entries.joinToString(", ") {
-            "\"${it.key}\": [${it.value.joinToString(",") {
-                "\"$it\""
-            }}]"
-        }
+            dependenciesMap.entries.joinToString(", ") {
+                "\"${it.key}\": [${
+                    it.value.joinToString(",") {
+                        "\"$it\""
+                    }
+                }]"
+            }
         }}'"
 
         val deps = RendererSpecificResourcePage(
-            name = "scripts/sourceset_dependencies.js",
+            name = name,
             children = emptyList(),
             strategy = RenderingStrategy.Write(createDependenciesJson())
         )
 
         return input.modified(
             children = input.children + deps
-        )
+        ).transformContentPagesTree { it.modified(embeddedResources = it.embeddedResources + name) }
     }
 }
-
-

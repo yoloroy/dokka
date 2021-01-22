@@ -8,17 +8,27 @@ import org.jetbrains.dokka.model.DocumentableSource
 import org.jetbrains.dokka.DokkaConfiguration.DokkaSourceSet
 import org.jetbrains.dokka.analysis.DescriptorDocumentableSource
 import org.jetbrains.dokka.analysis.PsiDocumentableSource
+import org.jetbrains.dokka.base.DokkaBase
+import org.jetbrains.dokka.base.resolvers.anchors.SymbolAnchorHint
 import org.jetbrains.dokka.model.WithSources
 import org.jetbrains.dokka.model.toDisplaySourceSets
 import org.jetbrains.dokka.pages.*
 import org.jetbrains.dokka.plugability.DokkaContext
+import org.jetbrains.dokka.plugability.plugin
+import org.jetbrains.dokka.plugability.querySingle
 import org.jetbrains.dokka.transformers.pages.PageTransformer
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptorWithSource
 import org.jetbrains.kotlin.resolve.source.getPsi
 import org.jetbrains.kotlin.utils.addToStdlib.cast
 import java.io.File
 
-class SourceLinksTransformer(val context: DokkaContext, val builder: PageContentBuilder) : PageTransformer {
+class SourceLinksTransformer(val context: DokkaContext) : PageTransformer {
+
+    private val builder : PageContentBuilder =  PageContentBuilder(
+        context.plugin<DokkaBase>().querySingle { commentsToContentConverter },
+        context.plugin<DokkaBase>().querySingle { signatureProvider },
+        context.logger
+    )
 
     override fun invoke(input: RootPageNode) =
         input.transformContentPagesTree { node ->
@@ -61,14 +71,14 @@ class SourceLinksTransformer(val context: DokkaContext, val builder: PageContent
     ) {
         header(2, "Sources", kind = ContentKind.Source)
         +ContentTable(
-            emptyList(),
-            sources.map {
-                buildGroup(node.dri, setOf(it.first), kind = ContentKind.Source) {
+            header = emptyList(),
+            children = sources.map {
+                buildGroup(node.dri, setOf(it.first), kind = ContentKind.Source, extra = mainExtra + SymbolAnchorHint(it.second, ContentKind.Source)) {
                     link("(source)", it.second)
                 }
             },
-            DCI(node.dri, ContentKind.Source),
-            node.documentable!!.sourceSets.toDisplaySourceSets(),
+            dci = DCI(node.dri, ContentKind.Source),
+            sourceSets = node.documentable!!.sourceSets.toDisplaySourceSets(),
             style = emptySet(),
             extra = mainExtra + SimpleAttr.header("Sources")
         )

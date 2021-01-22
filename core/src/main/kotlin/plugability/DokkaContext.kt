@@ -8,7 +8,6 @@ import java.util.*
 import kotlin.reflect.KClass
 import kotlin.reflect.full.createInstance
 
-
 interface DokkaContext {
     fun <T : DokkaPlugin> plugin(kclass: KClass<T>): T?
 
@@ -20,7 +19,6 @@ interface DokkaContext {
     val logger: DokkaLogger
     val configuration: DokkaConfiguration
     val unusedPoints: Collection<ExtensionPoint<*>>
-
 
     companion object {
         fun create(
@@ -127,7 +125,8 @@ private class DokkaContextConfigurationImpl(
 
     private fun findNotOverridden(bucket: Set<Extension<*, *, *>>): Extension<*, *, *> {
         val filtered = bucket.filter { it !in suppressedExtensions }
-        return filtered.singleOrNull() ?: throw IllegalStateException("Conflicting overrides: $filtered")
+        return filtered.singleOrNull()
+            ?: throw IllegalStateException("Conflicting overrides: $filtered")
     }
 
     private fun translateAdjacencyList(
@@ -190,7 +189,12 @@ private class DokkaContextConfigurationImpl(
         }
 
         if (extension.override is OverrideKind.Present) {
-            suppressedExtensions.listFor(extension.override.overriden) += Suppression.ByExtension(extension)
+            fun root(ext: Extension<*, *, *>): List<Extension<*, *, *>> = if (ext.override is OverrideKind.Present) ext.override.overriden.flatMap(::root) else listOf(ext)
+            if (extension.override.overriden.size > 1 && root(extension).distinct().size > 1)
+                throw IllegalStateException("Extension $extension overrides extensions without common root")
+            extension.override.overriden.forEach { overriden ->
+                suppressedExtensions.listFor(overriden) += Suppression.ByExtension(extension)
+            }
         }
     }
 

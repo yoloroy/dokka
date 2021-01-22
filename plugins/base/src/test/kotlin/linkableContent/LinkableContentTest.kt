@@ -1,16 +1,13 @@
 package linkableContent
 
 import org.jetbrains.dokka.SourceLinkDefinitionImpl
-import org.jetbrains.dokka.base.DokkaBase
 import org.jetbrains.dokka.base.transformers.pages.samples.DefaultSamplesTransformer
 import org.jetbrains.dokka.base.transformers.pages.sourcelinks.SourceLinksTransformer
-import org.jetbrains.dokka.base.translators.documentables.PageContentBuilder
 import org.jetbrains.dokka.model.WithGenerics
 import org.jetbrains.dokka.model.dfs
 import org.jetbrains.dokka.model.doc.Text
 import org.jetbrains.dokka.pages.*
-import org.jetbrains.dokka.plugability.plugin
-import org.jetbrains.dokka.testApi.testRunner.AbstractCoreTest
+import org.jetbrains.dokka.base.testApi.testRunner.BaseAbstractTest
 import org.jetbrains.kotlin.utils.addToStdlib.cast
 import org.jetbrains.kotlin.utils.addToStdlib.safeAs
 import org.junit.jupiter.api.Assertions
@@ -18,7 +15,7 @@ import org.junit.jupiter.api.Test
 import java.net.URL
 import java.nio.file.Paths
 
-class LinkableContentTest : AbstractCoreTest() {
+class LinkableContentTest : BaseAbstractTest() {
 
     @Test
     fun `Include module and package documentation`() {
@@ -127,14 +124,7 @@ class LinkableContentTest : AbstractCoreTest() {
 
         testFromData(configuration) {
             renderingStage = { rootPageNode, dokkaContext ->
-                val newRoot = SourceLinksTransformer(
-                    dokkaContext,
-                    PageContentBuilder(
-                        dokkaContext.single(dokkaContext.plugin<DokkaBase>().commentsToContentConverter),
-                        dokkaContext.single(dokkaContext.plugin<DokkaBase>().signatureProvider),
-                        dokkaContext.logger
-                    )
-                ).invoke(rootPageNode)
+                val newRoot = SourceLinksTransformer(dokkaContext).invoke(rootPageNode)
                 val moduleChildren = newRoot.children
                 Assertions.assertEquals(1, moduleChildren.size)
                 val packageChildren = moduleChildren.first().children
@@ -209,7 +199,7 @@ class LinkableContentTest : AbstractCoreTest() {
                     val function = classChildren.find { it.name == "printWithExclamation" }
                     val text = function.cast<MemberPageNode>().content.cast<ContentGroup>().children.last()
                         .cast<ContentDivergentGroup>().children.single()
-                        .cast<ContentDivergentInstance>().before
+                        .cast<ContentDivergentInstance>().after
                         .cast<ContentGroup>().children.last()
                         .cast<ContentGroup>().children.last()
                         .cast<PlatformHintedContent>().children.single()
@@ -308,6 +298,68 @@ class LinkableContentTest : AbstractCoreTest() {
                 Assertions.assertNotEquals(null, it.packages.first().documentation.values.single().dfs {
                     (it as? Text)?.body?.contains("@SqlTable") ?: false
                 })
+            }
+        }
+
+    }
+
+    @Test
+    fun `Include module with description parted in two files`() {
+
+        val testDataDir = getTestDataDir("multiplatform/basicMultiplatformTest").toAbsolutePath()
+        val includesDir = getTestDataDir("linkable/includes").toAbsolutePath()
+
+        val configuration = dokkaConfiguration {
+            moduleName = "example"
+            sourceSets {
+                val common = sourceSet {
+                    name = "common"
+                    displayName = "common"
+                    analysisPlatform = "common"
+                    sourceRoots = listOf(Paths.get("$testDataDir/commonMain/kotlin").toString())
+                }
+                val jvmAndJsSecondCommonMain = sourceSet {
+                    name = "jvmAndJsSecondCommonMain"
+                    displayName = "jvmAndJsSecondCommonMain"
+                    analysisPlatform = "common"
+                    dependentSourceSets = setOf(common.value.sourceSetID)
+                    sourceRoots = listOf(Paths.get("$testDataDir/jvmAndJsSecondCommonMain/kotlin").toString())
+                }
+                val js = sourceSet {
+                    name = "js"
+                    displayName = "js"
+                    analysisPlatform = "js"
+                    dependentSourceSets = setOf(common.value.sourceSetID, jvmAndJsSecondCommonMain.value.sourceSetID)
+                    sourceRoots = listOf(Paths.get("$testDataDir/jsMain/kotlin").toString())
+                    includes = listOf(Paths.get("$includesDir/include2.md").toString())
+                }
+                val jvm = sourceSet {
+                    name = "jvm"
+                    displayName = "jvm"
+                    analysisPlatform = "jvm"
+                    dependentSourceSets = setOf(common.value.sourceSetID, jvmAndJsSecondCommonMain.value.sourceSetID)
+                    sourceRoots = listOf(Paths.get("$testDataDir/jvmMain/kotlin").toString())
+                    includes = listOf(
+                        Paths.get("$includesDir/include1.md").toString(),
+                        Paths.get("$includesDir/include11.md").toString()
+                    )
+                }
+            }
+        }
+
+        testFromData(configuration) {
+            documentablesMergingStage = {
+                it.documentation.entries.single {
+                    it.key.displayName == "jvm"
+                }.value.run {
+                    Assertions.assertNotNull(dfs {
+                        (it as? Text)?.body == "This is second JVM documentation for module example"
+                    })
+
+                    Assertions.assertNotNull(dfs {
+                        (it as? Text)?.body == "This is JVM documentation for module example"
+                    })
+                }
             }
         }
 

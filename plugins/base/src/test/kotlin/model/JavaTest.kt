@@ -2,6 +2,8 @@ package model
 
 import org.jetbrains.dokka.base.transformers.documentables.InheritorsInfo
 import org.jetbrains.dokka.links.DRI
+import org.jetbrains.dokka.links.JavaClassReference
+import org.jetbrains.dokka.links.PointingToDeclaration
 import org.jetbrains.dokka.links.sureClassNames
 import org.jetbrains.dokka.model.*
 import org.jetbrains.dokka.model.doc.Param
@@ -11,6 +13,7 @@ import org.junit.jupiter.api.Test
 import utils.AbstractModelTest
 import utils.assertNotNull
 import utils.name
+import  org.jetbrains.dokka.links.Callable as DRICallable
 
 class JavaTest : AbstractModelTest("/src/main/kotlin/java/Test.java", "java") {
 
@@ -34,7 +37,7 @@ class JavaTest : AbstractModelTest("/src/main/kotlin/java/Test.java", "java") {
                 with((this / "fn").cast<DFunction>()) {
                     name equals "fn"
                     val params = parameters.map { it.documentation.values.first().children.first() as Param }
-                    params.mapNotNull { it.firstChildOfTypeOrNull<Text>()?.body } equals listOf("is String parameter", "is int parameter")
+                    params.mapNotNull { it.firstMemberOfType<Text>()?.body } equals listOf("is String parameter", "is int parameter")
                 }
             }
         }
@@ -271,7 +274,7 @@ class JavaTest : AbstractModelTest("/src/main/kotlin/java/Test.java", "java") {
             """
         ) {
             with((this / "java" / "Attribute").cast<DAnnotation>()) {
-                with(extra[Annotations]!!.content.entries.single().value.assertNotNull("Annotations")) {
+                with(extra[Annotations]!!.directAnnotations.entries.single().value.assertNotNull("Annotations")) {
                     with(single()) {
                         dri.classNames equals "Target"
                         (params["value"].assertNotNull("value") as ArrayValue).value equals listOf(
@@ -312,6 +315,10 @@ class JavaTest : AbstractModelTest("/src/main/kotlin/java/Test.java", "java") {
             with((this / "java" / "E").cast<DEnum>()) {
                 name equals "E"
                 entries counts 1
+                functions.sortedBy { it.name }.map { it.dri } equals listOf(
+                    DRI("java", "E", DRICallable("valueOf", null, listOf(JavaClassReference("java.lang.String"))), PointingToDeclaration),
+                    DRI("java", "E", DRICallable("values", null, emptyList()), PointingToDeclaration),
+                )
 
                 with((this / "Foo").cast<DEnumEntry>()) {
                     name equals "Foo"

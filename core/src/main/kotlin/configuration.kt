@@ -2,6 +2,7 @@
 
 package org.jetbrains.dokka
 
+import org.jetbrains.dokka.plugability.ConfigurableBlock
 import org.jetbrains.dokka.utilities.parseJson
 import org.jetbrains.dokka.utilities.toJsonString
 import java.io.File
@@ -15,6 +16,7 @@ object DokkaDefaults {
     val cacheRoot: File? = null
     const val offlineMode: Boolean = false
     const val failOnWarning: Boolean = false
+    const val delayTemplateSubstitution: Boolean = false
 
     const val includeNonPublic: Boolean = false
     const val reportUndocumented: Boolean = false
@@ -29,6 +31,7 @@ object DokkaDefaults {
     const val sourceSetDisplayName = "JVM"
     const val sourceSetName = "main"
     val moduleVersion: String? = null
+    val pluginsConfiguration = mutableListOf<PluginConfigurationImpl>()
 }
 
 enum class Platform(val key: String) {
@@ -81,6 +84,7 @@ data class DokkaSourceSetID(
 fun DokkaConfigurationImpl(json: String): DokkaConfigurationImpl = parseJson(json)
 
 fun DokkaConfiguration.toJsonString(): String = toJsonString(this)
+fun <T : ConfigurableBlock> T.toJsonString(): String = toJsonString(this)
 
 interface DokkaConfiguration : Serializable {
     val moduleName: String
@@ -92,7 +96,18 @@ interface DokkaConfiguration : Serializable {
     val sourceSets: List<DokkaSourceSet>
     val modules: List<DokkaModuleDescription>
     val pluginsClasspath: List<File>
-    val pluginsConfiguration: Map<String, String>
+    val pluginsConfiguration: List<PluginConfiguration>
+    val delayTemplateSubstitution: Boolean
+
+    enum class SerializationFormat : Serializable {
+        JSON, XML
+    }
+
+    interface PluginConfiguration : Serializable {
+        val fqPluginName: String
+        val serializationFormat: SerializationFormat
+        val values: String
+    }
 
     interface DokkaSourceSet : Serializable {
         val sourceSetID: DokkaSourceSetID
@@ -127,11 +142,12 @@ interface DokkaConfiguration : Serializable {
     interface DokkaModuleDescription : Serializable {
         val name: String
         val relativePathToOutputDirectory: File
+        val sourceOutputDirectory: File
         val includes: Set<File>
     }
 
     interface PackageOptions : Serializable {
-        val prefix: String
+        val matchingRegex: String
         val includeNonPublic: Boolean
         val reportUndocumented: Boolean?
         val skipDeprecated: Boolean

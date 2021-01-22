@@ -49,10 +49,13 @@ nav:
       - Gradle: user_guide/gradle/usage.md
       - Maven: user_guide/maven/usage.md
       - Command line: user_guide/cli/usage.md
+      - Html frontend: user_guide/base-specific/frontend.md
   - Plugin development:
       - Introduction: developer_guide/introduction.md
       - Data model: developer_guide/data_model.md
       - Extension points: developer_guide/extension_points.md
+  - Community:
+      - Community plugins: community/plugins-list.md
   - About:
       - FAQ: about/FAQ.md
       - Slack channel: about/slack_channel.md

@@ -36,12 +36,12 @@ class MultiModule0IntegrationTest(override val versions: BuildVersions) : Abstra
         assertEquals(TaskOutcome.SUCCESS, assertNotNull(result.task(":moduleA:dokkaHtmlMultiModule")).outcome)
         assertEquals(TaskOutcome.SUCCESS, assertNotNull(result.task(":moduleA:dokkaGfmMultiModule")).outcome)
         assertEquals(TaskOutcome.SUCCESS, assertNotNull(result.task(":moduleA:dokkaJekyllMultiModule")).outcome)
-        assertEquals(TaskOutcome.SUCCESS, assertNotNull(result.task(":moduleA:moduleB:dokkaHtml")).outcome)
-        assertEquals(TaskOutcome.SUCCESS, assertNotNull(result.task(":moduleA:moduleC:dokkaHtml")).outcome)
-        assertEquals(TaskOutcome.SUCCESS, assertNotNull(result.task(":moduleA:moduleB:dokkaGfm")).outcome)
-        assertEquals(TaskOutcome.SUCCESS, assertNotNull(result.task(":moduleA:moduleC:dokkaGfm")).outcome)
-        assertEquals(TaskOutcome.SUCCESS, assertNotNull(result.task(":moduleA:moduleB:dokkaJekyll")).outcome)
-        assertEquals(TaskOutcome.SUCCESS, assertNotNull(result.task(":moduleA:moduleC:dokkaJekyll")).outcome)
+        assertEquals(TaskOutcome.SUCCESS, assertNotNull(result.task(":moduleA:moduleB:dokkaHtmlPartial")).outcome)
+        assertEquals(TaskOutcome.SUCCESS, assertNotNull(result.task(":moduleA:moduleC:dokkaHtmlPartial")).outcome)
+        assertEquals(TaskOutcome.SUCCESS, assertNotNull(result.task(":moduleA:moduleB:dokkaGfmPartial")).outcome)
+        assertEquals(TaskOutcome.SUCCESS, assertNotNull(result.task(":moduleA:moduleC:dokkaGfmPartial")).outcome)
+        assertEquals(TaskOutcome.SUCCESS, assertNotNull(result.task(":moduleA:moduleB:dokkaJekyllPartial")).outcome)
+        assertEquals(TaskOutcome.SUCCESS, assertNotNull(result.task(":moduleA:moduleC:dokkaJekyllPartial")).outcome)
 
 
         val outputDir = File(projectDir, "moduleA/build/dokka/htmlMultiModule")
@@ -58,10 +58,11 @@ class MultiModule0IntegrationTest(override val versions: BuildVersions) : Abstra
             assertNoHrefToMissingLocalFileOrDirectory(file)
             assertNoEmptyLinks(file)
             assertNoEmptySpans(file)
+            assertNoUnsubstitutedTemplatesInHtml(file)
         }
 
-        val modulesFile = File(outputDir, "-modules.html")
-        assertTrue(modulesFile.isFile, "Missing -modules.html file")
+        val modulesFile = File(outputDir, "index.html")
+        assertTrue(modulesFile.isFile, "Missing index.html file")
 
         val modulesFileText = modulesFile.readText()
         assertTrue(
@@ -72,5 +73,17 @@ class MultiModule0IntegrationTest(override val versions: BuildVersions) : Abstra
             "moduleC" in modulesFileText,
             "Expected moduleC being mentioned in -modules.html"
         )
+
+        val gfmOutputDir = File(projectDir, "moduleA/build/dokka/gfmMultiModule")
+        assertTrue(gfmOutputDir.isDirectory, "Missing dokka GFM output directory")
+
+        assertTrue(
+            gfmOutputDir.allGfmFiles().any(),
+            "Expected at least one md file being generated"
+        )
+
+        gfmOutputDir.allGfmFiles().forEach { file ->
+            assertFalse("GfmCommand" in file.readText())
+        }
     }
 }

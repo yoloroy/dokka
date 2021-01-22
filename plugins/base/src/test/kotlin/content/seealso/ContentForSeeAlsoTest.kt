@@ -1,15 +1,14 @@
 package content.seealso
 
 import matchers.content.*
+import org.jetbrains.dokka.pages.ContentDRILink
 import org.jetbrains.dokka.pages.ContentPage
-import org.jetbrains.dokka.testApi.testRunner.AbstractCoreTest
+import org.jetbrains.dokka.base.testApi.testRunner.BaseAbstractTest
 import org.junit.jupiter.api.Test
-import utils.ParamAttributes
-import utils.bareSignature
-import utils.pWrapped
-import utils.unnamedTag
+import utils.*
+import kotlin.test.assertEquals
 
-class ContentForSeeAlsoTest : AbstractCoreTest() {
+class ContentForSeeAlsoTest : BaseAbstractTest() {
     private val testConfiguration = dokkaConfiguration {
         sourceSets {
             sourceSet {
@@ -81,20 +80,6 @@ class ContentForSeeAlsoTest : AbstractCoreTest() {
                     }
                     divergentGroup {
                         divergentInstance {
-                            before {
-                                header(2) { +"See also" }
-                                group {
-                                    platformHinted {
-                                        table {
-                                            group {
-                                                //DRI should be "test//abc/#/-1/"
-                                                link { +"abc" }
-                                                group { group { } }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
                             divergent {
                                 bareSignature(
                                     emptyMap(),
@@ -105,6 +90,20 @@ class ContentForSeeAlsoTest : AbstractCoreTest() {
                                     null,
                                     "abc" to ParamAttributes(emptyMap(), emptySet(), "String")
                                 )
+                            }
+                            after {
+                                header(2) { +"See also" }
+                                group {
+                                    platformHinted {
+                                        table {
+                                            group {
+                                                //DRI should be "test//abc/#/-1/"
+                                                link { +"abc" }
+                                                group { }
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -136,7 +135,18 @@ class ContentForSeeAlsoTest : AbstractCoreTest() {
                     }
                     divergentGroup {
                         divergentInstance {
-                            before {
+                            divergent {
+                                bareSignature(
+                                    emptyMap(),
+                                    "",
+                                    "",
+                                    emptySet(),
+                                    "function",
+                                    null,
+                                    "abc" to ParamAttributes(emptyMap(), emptySet(), "String")
+                                )
+                            }
+                            after {
                                 header(2) { +"See also" }
                                 group {
                                     platformHinted {
@@ -151,17 +161,6 @@ class ContentForSeeAlsoTest : AbstractCoreTest() {
                                         }
                                     }
                                 }
-                            }
-                            divergent {
-                                bareSignature(
-                                    emptyMap(),
-                                    "",
-                                    "",
-                                    emptySet(),
-                                    "function",
-                                    null,
-                                    "abc" to ParamAttributes(emptyMap(), emptySet(), "String")
-                                )
                             }
                         }
                     }
@@ -193,22 +192,6 @@ class ContentForSeeAlsoTest : AbstractCoreTest() {
                     }
                     divergentGroup {
                         divergentInstance {
-                            before {
-                                header(2) { +"See also" }
-                                group {
-                                    platformHinted {
-                                        table {
-                                            group {
-                                                //DRI should be "kotlin.collections/Collection////"
-                                                link { +"Collection" }
-                                                group {
-                                                    group { }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
                             divergent {
                                 bareSignature(
                                     emptyMap(),
@@ -219,6 +202,24 @@ class ContentForSeeAlsoTest : AbstractCoreTest() {
                                     null,
                                     "abc" to ParamAttributes(emptyMap(), emptySet(), "String")
                                 )
+                            }
+                            after {
+                                header(2) { +"See also" }
+                                group {
+                                    platformHinted {
+                                        table {
+                                            group {
+                                                link {
+                                                    check {
+                                                        assertEquals("kotlin.collections/Collection///PointingToDeclaration/", (this as ContentDRILink).address.toString())
+                                                    }
+                                                    +"kotlin.collections.Collection"
+                                                }
+                                                group { }
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -250,22 +251,6 @@ class ContentForSeeAlsoTest : AbstractCoreTest() {
                     }
                     divergentGroup {
                         divergentInstance {
-                            before {
-                                header(2) { +"See also" }
-                                group {
-                                    platformHinted {
-                                        table {
-                                            group {
-                                                //DRI should be "test//abc/#/-1/"
-                                                link { +"Collection" }
-                                                group {
-                                                    group { +"Comment to stdliblink" }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
                             divergent {
                                 bareSignature(
                                     emptyMap(),
@@ -276,6 +261,22 @@ class ContentForSeeAlsoTest : AbstractCoreTest() {
                                     null,
                                     "abc" to ParamAttributes(emptyMap(), emptySet(), "String")
                                 )
+                            }
+                            after {
+                                header(2) { +"See also" }
+                                group {
+                                    platformHinted {
+                                        table {
+                                            group {
+                                                //DRI should be "test//abc/#/-1/"
+                                                link { +"kotlin.collections.Collection" }
+                                                group {
+                                                    group { +"Comment to stdliblink" }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -310,26 +311,6 @@ class ContentForSeeAlsoTest : AbstractCoreTest() {
                     }
                     divergentGroup {
                         divergentInstance {
-                            before {
-                                group { group { group { +"random comment"} } }
-                                unnamedTag("Author") { group { +"pikinier20" } }
-                                unnamedTag("Since") { group { +"0.11" } }
-
-                                header(2) { +"See also" }
-                                group {
-                                    platformHinted {
-                                        table {
-                                            group {
-                                                //DRI should be "test//abc/#/-1/"
-                                                link { +"Collection" }
-                                                group {
-                                                    group { +"Comment to stdliblink" }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
                             divergent {
                                 bareSignature(
                                     emptyMap(),
@@ -340,6 +321,26 @@ class ContentForSeeAlsoTest : AbstractCoreTest() {
                                     null,
                                     "abc" to ParamAttributes(emptyMap(), emptySet(), "String")
                                 )
+                            }
+                            after {
+                                group { comment { +"random comment"} }
+                                unnamedTag("Author") { comment { +"pikinier20" } }
+                                unnamedTag("Since") { comment { +"0.11" } }
+
+                                header(2) { +"See also" }
+                                group {
+                                    platformHinted {
+                                        table {
+                                            group {
+                                                //DRI should be "test//abc/#/-1/"
+                                                link { +"kotlin.collections.Collection" }
+                                                group {
+                                                    group { +"Comment to stdliblink" }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -372,7 +373,18 @@ class ContentForSeeAlsoTest : AbstractCoreTest() {
                     }
                     divergentGroup {
                         divergentInstance {
-                            before {
+                            divergent {
+                                bareSignature(
+                                    emptyMap(),
+                                    "",
+                                    "",
+                                    emptySet(),
+                                    "function",
+                                    null,
+                                    "abc" to ParamAttributes(emptyMap(), emptySet(), "String")
+                                )
+                            }
+                            after {
                                 header(2) { +"See also" }
                                 group {
                                     platformHinted {
@@ -387,17 +399,6 @@ class ContentForSeeAlsoTest : AbstractCoreTest() {
                                         }
                                     }
                                 }
-                            }
-                            divergent {
-                                bareSignature(
-                                    emptyMap(),
-                                    "",
-                                    "",
-                                    emptySet(),
-                                    "function",
-                                    null,
-                                    "abc" to ParamAttributes(emptyMap(), emptySet(), "String")
-                                )
                             }
                         }
                     }
@@ -430,7 +431,18 @@ class ContentForSeeAlsoTest : AbstractCoreTest() {
                     }
                     divergentGroup {
                         divergentInstance {
-                            before {
+                            divergent {
+                                bareSignature(
+                                    emptyMap(),
+                                    "",
+                                    "",
+                                    emptySet(),
+                                    "function",
+                                    null,
+                                    "abc" to ParamAttributes(emptyMap(), emptySet(), "String")
+                                )
+                            }
+                            after {
                                 header(2) { +"See also" }
                                 group {
                                     platformHinted {
@@ -444,23 +456,12 @@ class ContentForSeeAlsoTest : AbstractCoreTest() {
                                             }
                                             group {
                                                 //DRI should be "test//abc/#/-1/"
-                                                link { +"Collection" }
+                                                link { +"kotlin.collections.Collection" }
                                                 group { group {  +"Comment to collection" } }
                                             }
                                         }
                                     }
                                 }
-                            }
-                            divergent {
-                                bareSignature(
-                                    emptyMap(),
-                                    "",
-                                    "",
-                                    emptySet(),
-                                    "function",
-                                    null,
-                                    "abc" to ParamAttributes(emptyMap(), emptySet(), "String")
-                                )
                             }
                         }
                     }

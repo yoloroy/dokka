@@ -149,13 +149,13 @@ internal class JavadocClasslikeTemplateMapTest : AbstractJavadocTemplateMapTest(
             val map = allPagesOfType<JavadocClasslikePageNode>().first { it.name == "TestClass" }.templateMap
             assertEquals("TestClass", map["name"])
             val signature = assertIsInstance<Map<String, Any?>>(map["signature"])
-            assertEquals("@<a href=Author.html>Author</a>(name = \"Benjamin Franklin\")", signature["annotations"])
+            assertEquals("@<a href=Author.html>Author</a>(name = Benjamin Franklin)", signature["annotations"])
 
             val methods = assertIsInstance<Map<Any, Any?>>(map["methods"])
             val ownMethods = assertIsInstance<List<*>>(methods["own"])
             val method = assertIsInstance<Map<String, Any?>>(ownMethods.single())
             val methodSignature = assertIsInstance<Map<String, Any?>>(method["signature"])
-            assertEquals("@<a href=Author.html>Author</a>(name = \"Franklin D. Roosevelt\")", methodSignature["annotations"])
+            assertEquals("@<a href=Author.html>Author</a>(name = Franklin D. Roosevelt)", methodSignature["annotations"])
         }
     }
 
@@ -313,6 +313,33 @@ internal class JavadocClasslikeTemplateMapTest : AbstractJavadocTemplateMapTest(
             val sampleFunction = assertIsInstance<Map<String, Any?>>(ownMethods)
 
             assertEquals("final &lt;D extends <a href=Generic.html>T</a>&gt; <a href=Generic.html#sampleFunction()>D</a> <a href=Generic.html#sampleFunction()>sampleFunction</a>()", sampleFunction.signatureWithModifiers())
+        }
+    }
+
+    @Test
+    fun `class with top-level const`() {
+        dualTestTemplateMapInline(
+            kotlin =
+                """
+                /src/Test.kt
+                package com.test.package0
+                
+                const val TEST_VAL = "test"
+                """,
+            java =
+                """
+                /src/com/test/package0/TestKt.java
+                package com.test.package0;
+                
+                public final class TestKt {
+                    public static final String TEST_VAL = "test"; 
+                }
+                """
+        ) {
+            val map = singlePageOfType<JavadocClasslikePageNode>().templateMap
+            val properties = assertIsInstance<List<*>>(map["properties"])
+            val property = assertIsInstance<Map<String, Any?>>(properties.first())
+            assertEquals("public final static <a href=https://docs.oracle.com/javase/8/docs/api/java/lang/String.html>String</a> <a href=TestKt.html#TEST_VAL>TEST_VAL</a>", "${property["modifiers"]} ${property["signature"]}")
         }
     }
 

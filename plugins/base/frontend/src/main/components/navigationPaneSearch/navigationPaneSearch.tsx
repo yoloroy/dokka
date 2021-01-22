@@ -4,6 +4,7 @@ import { DokkaFuzzyFilterComponent } from '../search/dokkaFuzzyFilter';
 import { IWindow, Option } from '../search/types';
 import './navigationPaneSearch.scss';
 import ClearIcon from 'react-svg-loader!./clear.svg';
+import { relativizeUrlForRequest } from '../utils/requests';
 
 export const NavigationPaneSearch = () => {
     const [navigationList, setNavigationList] = useState<Option[]>([]);
@@ -26,10 +27,12 @@ export const NavigationPaneSearch = () => {
         setFilterValue('')
     }
 
+    const shouldShowPopup = (filterState: string): boolean => {
+        return filterState.trim().length !== 0
+    }
+
     useEffect(() => {
-        const pathToRoot = (window as IWindow).pathToRoot
-        const url = pathToRoot.endsWith('/') ? `${pathToRoot}scripts/navigation-pane.json` : `${pathToRoot}/scripts/navigation-pane.json`
-        fetch(url)
+        fetch(relativizeUrlForRequest('scripts/navigation-pane.json'))
             .then(response => response.json())
             .then((result) => {
                 setNavigationList(result.map((record: Option, idx: number) => {
@@ -60,6 +63,7 @@ export const NavigationPaneSearch = () => {
                     popupClassName={"navigation-pane-popup"}
                     onSelect={onChangeSelected}
                     onFilter={onFilter}
+                    shouldShowPopup={shouldShowPopup}
                     renderOptimization={false}
                 />
                 <span className={"paneSearchInputClearIcon"} onClick={onClearClick}><ClearIcon /></span>

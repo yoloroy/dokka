@@ -10,7 +10,7 @@ you not only need to add `dokka` to the `build.gradle.kts` file, but you also ne
 build.gradle.kts:
 ```kotlin
 plugins {
-    id("org.jetbrains.dokka") version "1.4.10"
+    id("org.jetbrains.dokka") version "1.4.20"
 }
 
 repositories {
@@ -169,8 +169,9 @@ dokkaHtml {
 
             // Allows to customize documentation generation options on a per-package basis
             // Repeat for multiple packageOptions
+            // If multiple packages match the same matchingRegex, the longuest matchingRegex will be used
             perPackageOption {
-                prefix.set("kotlin") // will match kotlin and all sub-packages of it
+                matchingRegex.set("kotlin($|\\.).*") // will match kotlin and all sub-packages of it
                 // All options are optional, default values are below:
                 skipDeprecated.set(false)
                 reportUndocumented.set(true) // Emit warnings about not documented members 
@@ -178,9 +179,13 @@ dokkaHtml {
             }
             // Suppress a package
             perPackageOption {
-                prefix.set("kotlin.internal") // will match kotlin.internal and all sub-packages of it
+                matchingRegex.set(".*\.internal.*") // will match all .internal packages and sub-packages 
                 suppress.set(true)
             }
+        }
+        // Configures a plugin separately from the global configuration
+        pluginConfiguration<PluginClass, ConfigurationClass>{
+            // values
         }
     }
 }
@@ -209,8 +214,8 @@ tasks.withType<DokkaTask>().configureEach {
             }
 
             register("differentName") { // Different name, so source roots must be passed explicitly
-                displayName = "JVM"
-                platform = "jvm"
+                displayName.set("JVM")
+                platform.set(org.jetbrains.dokka.Platform.jvm)
                 sourceRoots.from(kotlin.sourceSets.getByName("jvmMain").kotlin.srcDirs)
                 sourceRoots.from(kotlin.sourceSets.getByName("commonMain").kotlin.srcDirs)
             }
@@ -226,7 +231,7 @@ Dokka plugin creates Gradle configuration for each output format in the form of 
 
 ```kotlin
 dependencies {
-    dokkaHtmlPlugin("org.jetbrains.dokka:kotlin-as-java-plugin:1.4.10")
+    dokkaHtmlPlugin("org.jetbrains.dokka:kotlin-as-java-plugin:1.4.20")
 }
 ``` 
 
@@ -235,7 +240,7 @@ You can also create a custom Dokka task and add plugins directly inside:
 ```kotlin
 val customDokkaTask by creating(DokkaTask::class) {
     dependencies {
-        plugins("org.jetbrains.dokka:kotlin-as-java-plugin:1.4.10")
+        plugins("org.jetbrains.dokka:kotlin-as-java-plugin:1.4.20")
     }
 }
 ```
@@ -249,6 +254,21 @@ To generate the documentation, use the appropriate `dokka${format}` Gradle task:
 ./gradlew dokkaHtml
 ```
 
+Some plugins can be configured separately using a plugin class and configuration class. For example:
+
+```kotlin
+pluginConfiguration<DokkaBase, DokkaBaseConfiguration> {
+    customAssets = listOf(file("<path to asset>"))
+    customStyleSheets = listOf(file("<path to custom stylesheet>"))
+}
+```
+
+Keep in mind, that this only works when using a buildscript (with the configured plugin on classpath) since it is not possible to import plugin's class without it.
+
+If you don't want to use a buildscript or use Kotlin version lower than 1.3.50 you can achieve the same behaviour manually:
+```kotlin
+pluginsMapConfiguration.set(mapOf("<fully qualified plugin's name>" to """<json configuration>"""))
+```
 ## Android
 
 !!! important
@@ -283,16 +303,15 @@ dokkaHtml.configure {
 ```
 
 ## Multi-module projects
-For documenting Gradle multi-module projects, you can use `dokka${format}Multimodule` tasks.
+For documenting Gradle multi-module projects, you can use `dokka${format}MultiModule` tasks.
 
 ```kotlin
 tasks.dokkaHtmlMultiModule.configure {
     outputDirectory.set(buildDir.resolve("dokkaCustomMultiModuleOutput"))
-    documentationFileName.set("README.md")
 }
 ```
 
-`DokkaMultiModule` depends on all Dokka tasks in the subprojects, runs them, and creates a toplevel page (based on the `documentationFile`)
+`DokkaMultiModule` depends on all Dokka tasks in the subprojects, runs them, and creates a toplevel page
 with links to all generated (sub)documentations
 
 ## Example project

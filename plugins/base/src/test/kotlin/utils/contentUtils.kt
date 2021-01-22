@@ -33,7 +33,9 @@ fun ContentMatcherBuilder<*>.bareSignature(
             unwrapAnnotation(it)
         }
     }
-    +("$visibility $modifier ${keywords.joinToString("") { "$it " }} fun")
+    if (visibility.isNotBlank()) +"$visibility "
+    if (modifier.isNotBlank()) +"$modifier "
+    +("${keywords.joinToString("") { "$it " }}fun ")
     link { +name }
     +"("
     params.forEachIndexed { id, (n, t) ->
@@ -45,7 +47,7 @@ fun ContentMatcherBuilder<*>.bareSignature(
             +it
         }
 
-        +"$n:"
+        +"$n: "
         group { link { +(t.type) } }
         if (id != params.lastIndex)
             +", "
@@ -90,7 +92,9 @@ fun ContentMatcherBuilder<*>.bareSignatureWithReceiver(
             unwrapAnnotation(it)
         }
     }
-    +("$visibility $modifier ${keywords.joinToString("") { "$it " }} fun")
+    if (visibility != null && visibility.isNotBlank()) +"$visibility "
+    if (modifier != null && modifier.isNotBlank()) +"$modifier "
+    +("${keywords.joinToString("") { "$it " }}fun ")
     group {
         link { +receiver }
     }
@@ -106,7 +110,7 @@ fun ContentMatcherBuilder<*>.bareSignatureWithReceiver(
             +it
         }
 
-        +"$n:"
+        +"$n: "
         group { link { +(t.type) } }
         if (id != params.lastIndex)
             +", "
@@ -129,7 +133,8 @@ fun ContentMatcherBuilder<*>.propertySignature(
     keywords: Set<String>,
     preposition: String,
     name: String,
-    type: String? = null
+    type: String? = null,
+    value: String? = null
 ) {
     group {
         header { +"Package test" }
@@ -149,7 +154,9 @@ fun ContentMatcherBuilder<*>.propertySignature(
                                     unwrapAnnotation(it)
                                 }
                             }
-                            +("$visibility $modifier ${keywords.joinToString("") { "$it " }} $preposition")
+                            if (visibility.isNotBlank()) +"$visibility "
+                            if (modifier.isNotBlank()) +"$modifier "
+                            +("${keywords.joinToString("") { "$it " }}$preposition ")
                             link { +name }
                             if (type != null) {
                                 +(": ")
@@ -158,6 +165,9 @@ fun ContentMatcherBuilder<*>.propertySignature(
                                         +(type)
                                     }
                                 }
+                            }
+                            if (type != null) {
+                                +(" = $value")
                             }
                         }
                     }
@@ -218,7 +228,14 @@ fun ContentMatcherBuilder<*>.pWrapped(text: String) =
 fun ContentMatcherBuilder<*>.unnamedTag(tag: String, content: ContentMatcherBuilder<ContentGroup>.() -> Unit) =
     group {
         header(4) { +tag }
-        group { content() }
+        content()
+    }
+
+fun ContentMatcherBuilder<*>.comment(content: ContentMatcherBuilder<ContentGroup>.() -> Unit) =
+    group {
+        group {
+            content()
+        }
     }
 
 fun ContentMatcherBuilder<*>.unwrapAnnotation(elem: Map.Entry<String, Set<String>>) {

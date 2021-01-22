@@ -1,11 +1,11 @@
 package org.jetbrains.dokka.javadoc.transformers.documentables
 
 import org.jetbrains.dokka.DokkaSourceSetID
-import org.jetbrains.dokka.testApi.testRunner.AbstractCoreTest
+import org.jetbrains.dokka.base.testApi.testRunner.BaseAbstractTest
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 
-class JavadocDocumentableJVMSourceSetFilterTest: AbstractCoreTest() {
+class JavadocDocumentableJVMSourceSetFilterTest: BaseAbstractTest() {
 
     private val config = dokkaConfiguration {
         format = "javadoc"
@@ -83,7 +83,7 @@ class JavadocDocumentableJVMSourceSetFilterTest: AbstractCoreTest() {
     fun `non-jvm and not dependent common source sets are ommited`() {
         testInline(query, config) {
             documentablesFirstTransformationStep = { modules ->
-                assertEquals(4, modules.size)
+                assertEquals(2, modules.size)
             }
         }
     }

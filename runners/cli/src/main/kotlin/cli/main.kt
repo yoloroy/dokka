@@ -19,7 +19,7 @@ class GlobalArguments(args: Array<String>) : DokkaConfiguration {
         ArgType.String,
         description = "Name of the documentation module",
         fullName = "moduleName"
-    ).required()
+    ).default(DokkaDefaults.moduleName)
 
     override val moduleName: String by _moduleName
 
@@ -46,7 +46,7 @@ class GlobalArguments(args: Array<String>) : DokkaConfiguration {
     override val pluginsConfiguration by parser.option(
         ArgTypePlugin,
         description = "Configuration for plugins in format fqPluginName=json^^fqPluginName=json..."
-    ).default(emptyMap())
+    ).delimiter("^^")
 
     override val pluginsClasspath by parser.option(
         ArgTypeFile,
@@ -63,6 +63,11 @@ class GlobalArguments(args: Array<String>) : DokkaConfiguration {
         ArgType.Boolean,
         "Throw an exception if the generation exited with warnings"
     ).default(DokkaDefaults.failOnWarning)
+
+    override val delayTemplateSubstitution by parser.option(
+        ArgType.Boolean,
+        description = "Delay substitution of some elements (usefull for incremental builds of multimodule projects)"
+    ).default(DokkaDefaults.delayTemplateSubstitution)
 
     val globalPackageOptions by parser.option(
         ArgType.String,
@@ -254,16 +259,22 @@ object ArgTypeFile : ArgType<File>(true) {
 object ArgTypePlatform : ArgType<Platform>(true) {
     override fun convert(value: kotlin.String, name: kotlin.String): Platform = Platform.fromString(value)
     override val description: kotlin.String
-        get() = "{ String thar represents paltform }"
+        get() = "{ String that represents platform }"
 }
 
-object ArgTypePlugin : ArgType<Map<String, String>>(true) {
-    override fun convert(value: kotlin.String, name: kotlin.String): Map<kotlin.String, kotlin.String> =
-        value.split("^^").map {
-            it.split("=").let {
-                it[0] to it[1]
-            }
-        }.toMap()
+object ArgTypePlugin : ArgType<DokkaConfiguration.PluginConfiguration>(true) {
+    override fun convert(
+        value: kotlin.String,
+        name: kotlin.String
+    ): DokkaConfiguration.PluginConfiguration {
+        return value.split("=").let {
+            PluginConfigurationImpl(
+                fqPluginName = it[0],
+                serializationFormat = DokkaConfiguration.SerializationFormat.JSON,
+                values = it[1]
+            )
+        }
+    }
 
     override val description: kotlin.String
         get() = "{ String fqName=json, remember to escape `\"` inside json }"

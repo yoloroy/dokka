@@ -4,9 +4,10 @@ package org.jetbrains.dokka.base
 
 import org.jetbrains.dokka.CoreExtensions
 import org.jetbrains.dokka.analysis.KotlinAnalysis
-import org.jetbrains.dokka.base.allModulePage.MultimodulePageCreator
 import org.jetbrains.dokka.base.renderers.*
 import org.jetbrains.dokka.base.renderers.html.*
+import org.jetbrains.dokka.base.renderers.html.command.consumers.PathToRootConsumer
+import org.jetbrains.dokka.base.renderers.html.command.consumers.ResolveLinkConsumer
 import org.jetbrains.dokka.base.resolvers.external.ExternalLocationProviderFactory
 import org.jetbrains.dokka.base.resolvers.external.DefaultExternalLocationProviderFactory
 import org.jetbrains.dokka.base.resolvers.external.javadoc.JavadocExternalLocationProviderFactory
@@ -15,6 +16,7 @@ import org.jetbrains.dokka.base.resolvers.local.LocationProviderFactory
 import org.jetbrains.dokka.base.resolvers.shared.RecognizedLinkFormat
 import org.jetbrains.dokka.base.signatures.KotlinSignatureProvider
 import org.jetbrains.dokka.base.signatures.SignatureProvider
+import org.jetbrains.dokka.base.templating.ImmediateHtmlCommandConsumer
 import org.jetbrains.dokka.base.transformers.documentables.*
 import org.jetbrains.dokka.base.transformers.pages.annotations.SinceKotlinTransformer
 import org.jetbrains.dokka.base.transformers.pages.comments.CommentsToContentConverter
@@ -24,12 +26,15 @@ import org.jetbrains.dokka.base.transformers.pages.samples.DefaultSamplesTransfo
 import org.jetbrains.dokka.base.transformers.pages.sourcelinks.SourceLinksTransformer
 import org.jetbrains.dokka.base.translators.descriptors.DefaultDescriptorToDocumentableTranslator
 import org.jetbrains.dokka.base.translators.documentables.DefaultDocumentableToPageTranslator
-import org.jetbrains.dokka.base.translators.documentables.PageContentBuilder
 import org.jetbrains.dokka.base.translators.psi.DefaultPsiToDocumentableTranslator
+import org.jetbrains.dokka.base.generation.SingleModuleGeneration
 import org.jetbrains.dokka.plugability.DokkaPlugin
+import org.jetbrains.dokka.transformers.documentation.PreMergeDocumentableTransformer
 import org.jetbrains.dokka.transformers.pages.PageTransformer
 
 class DokkaBase : DokkaPlugin() {
+
+    val preMergeDocumentableTransformer by extensionPoint<PreMergeDocumentableTransformer>()
     val pageMergerStrategy by extensionPoint<PageMergerStrategy>()
     val commentsToContentConverter by extensionPoint<CommentsToContentConverter>()
     val signatureProvider by extensionPoint<SignatureProvider>()
@@ -39,18 +44,18 @@ class DokkaBase : DokkaPlugin() {
     val htmlPreprocessors by extensionPoint<PageTransformer>()
     val kotlinAnalysis by extensionPoint<KotlinAnalysis>()
     val tabSortingStrategy by extensionPoint<TabSortingStrategy>()
+    val immediateHtmlCommandConsumer by extensionPoint<ImmediateHtmlCommandConsumer>()
 
+    val singleGeneration by extending {
+        CoreExtensions.generation providing ::SingleModuleGeneration
+    }
 
     val descriptorToDocumentableTranslator by extending {
-        CoreExtensions.sourceToDocumentableTranslator providing { ctx ->
-            DefaultDescriptorToDocumentableTranslator(ctx.single(kotlinAnalysis))
-        }
+        CoreExtensions.sourceToDocumentableTranslator providing ::DefaultDescriptorToDocumentableTranslator
     }
 
     val psiToDocumentableTranslator by extending {
-        CoreExtensions.sourceToDocumentableTranslator providing { ctx ->
-            DefaultPsiToDocumentableTranslator(ctx.single(kotlinAnalysis))
-        }
+        CoreExtensions.sourceToDocumentableTranslator providing ::DefaultPsiToDocumentableTranslator
     }
 
     val documentableMerger by extending {
@@ -58,39 +63,39 @@ class DokkaBase : DokkaPlugin() {
     }
 
     val deprecatedDocumentableFilter by extending {
-        CoreExtensions.preMergeDocumentableTransformer providing ::DeprecatedDocumentableFilterTransformer
+        preMergeDocumentableTransformer providing ::DeprecatedDocumentableFilterTransformer
     }
 
     val suppressedDocumentableFilter by extending {
-        CoreExtensions.preMergeDocumentableTransformer providing ::SuppressedDocumentableFilterTransformer
+        preMergeDocumentableTransformer providing ::SuppressedDocumentableFilterTransformer
     }
 
     val documentableVisbilityFilter by extending {
-        CoreExtensions.preMergeDocumentableTransformer providing ::DocumentableVisibilityFilterTransformer
+        preMergeDocumentableTransformer providing ::DocumentableVisibilityFilterTransformer
     }
 
     val emptyPackagesFilter by extending {
-        CoreExtensions.preMergeDocumentableTransformer providing ::EmptyPackagesFilterTransformer order {
+        preMergeDocumentableTransformer providing ::EmptyPackagesFilterTransformer order {
             after(deprecatedDocumentableFilter, suppressedDocumentableFilter, documentableVisbilityFilter)
         }
+    }
+
+    val emptyModulesFilter by extending {
+        preMergeDocumentableTransformer with EmptyModulesFilterTransformer() order {
+            after(emptyPackagesFilter)
+        }
+    }
+
+    val modulesAndPackagesDocumentation by extending {
+        preMergeDocumentableTransformer providing ::ModuleAndPackageDocumentationTransformer
     }
 
     val actualTypealiasAdder by extending {
         CoreExtensions.documentableTransformer with ActualTypealiasAdder()
     }
 
-    val modulesAndPackagesDocumentation by extending {
-        CoreExtensions.preMergeDocumentableTransformer providing { ctx ->
-            ModuleAndPackageDocumentationTransformer(
-                ModuleAndPackageDocumentationReader(ctx, ctx.single(kotlinAnalysis))
-            )
-        }
-    }
-
     val kotlinSignatureProvider by extending {
-        signatureProvider providing { ctx ->
-            KotlinSignatureProvider(ctx.single(commentsToContentConverter), ctx.logger)
-        }
+        signatureProvider providing ::KotlinSignatureProvider
     }
 
     val sinceKotlinTransformer by extending {
@@ -111,21 +116,15 @@ class DokkaBase : DokkaPlugin() {
     }
 
     val documentableToPageTranslator by extending {
-        CoreExtensions.documentableToPageTranslator providing { ctx ->
-            DefaultDocumentableToPageTranslator(
-                ctx.single(commentsToContentConverter),
-                ctx.single(signatureProvider),
-                ctx.logger
-            )
-        }
+        CoreExtensions.documentableToPageTranslator providing ::DefaultDocumentableToPageTranslator
     }
 
     val docTagToContentConverter by extending {
-        commentsToContentConverter with DocTagToContentConverter
+        commentsToContentConverter with DocTagToContentConverter()
     }
 
     val pageMerger by extending {
-        CoreExtensions.pageTransformer providing { ctx -> PageMerger(ctx[pageMergerStrategy]) }
+        CoreExtensions.pageTransformer providing ::PageMerger
     }
 
     val sourceSetMerger by extending {
@@ -182,32 +181,35 @@ class DokkaBase : DokkaPlugin() {
     }
 
     val sourceLinksTransformer by extending {
-        htmlPreprocessors providing {
-            SourceLinksTransformer(
-                it,
-                PageContentBuilder(
-                    it.single(commentsToContentConverter),
-                    it.single(signatureProvider),
-                    it.logger
-                )
-            )
-        } order { after(rootCreator) }
+        htmlPreprocessors providing ::SourceLinksTransformer order { after(rootCreator) }
     }
 
     val navigationPageInstaller by extending {
-        htmlPreprocessors with NavigationPageInstaller order { after(rootCreator) }
+        htmlPreprocessors providing ::NavigationPageInstaller order { after(rootCreator) }
     }
 
-    val searchPageInstaller by extending {
-        htmlPreprocessors with SearchPageInstaller order { after(rootCreator) }
+    val navigationSearchInstaller by extending {
+        htmlPreprocessors providing ::NavigationSearchInstaller order { after(rootCreator) }
     }
 
-    val resourceInstaller by extending {
-        htmlPreprocessors with ResourceInstaller order { after(rootCreator) }
+    val scriptsInstaller by extending {
+        htmlPreprocessors with ScriptsInstaller order { after(rootCreator) }
     }
 
-    val styleAndScriptsAppender by extending {
-        htmlPreprocessors with StyleAndScriptsAppender order { after(rootCreator) }
+    val stylesInstaller by extending {
+        htmlPreprocessors with StylesInstaller order { after(rootCreator) }
+    }
+
+    val assetsInstaller by extending {
+        htmlPreprocessors with AssetsInstaller order { after(rootCreator) }
+    }
+
+    val customResourceInstaller by extending {
+        htmlPreprocessors providing { ctx -> CustomResourceInstaller(ctx) } order {
+            after(stylesInstaller)
+            after(scriptsInstaller)
+            after(assetsInstaller)
+        }
     }
 
     val packageListCreator by extending {
@@ -220,9 +222,14 @@ class DokkaBase : DokkaPlugin() {
         htmlPreprocessors providing ::SourcesetDependencyAppender order { after(rootCreator) }
     }
 
-    val allModulePageCreators by extending {
-        CoreExtensions.allModulePageCreator providing {
-            MultimodulePageCreator(it)
-        }
+    val resolveLinkConsumer by extending {
+        immediateHtmlCommandConsumer with ResolveLinkConsumer
+    }
+
+    val pathToRootConsumer by extending {
+        immediateHtmlCommandConsumer with PathToRootConsumer
+    }
+    val baseSearchbarDataInstaller by extending {
+        htmlPreprocessors providing ::SearchbarDataInstaller order { after(sourceLinksTransformer) }
     }
 }

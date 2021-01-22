@@ -1,15 +1,11 @@
 package signatures
 
-import org.jetbrains.dokka.DokkaConfiguration
 import org.jetbrains.dokka.DokkaSourceSetID
-import org.jetbrains.dokka.jdk
-import org.jetbrains.dokka.testApi.testRunner.AbstractCoreTest
-import org.jsoup.Jsoup
-import org.jsoup.nodes.Element
+import org.jetbrains.dokka.base.testApi.testRunner.BaseAbstractTest
 import org.junit.jupiter.api.Test
 import utils.*
 
-class SignatureTest : AbstractCoreTest() {
+class SignatureTest : BaseAbstractTest() {
     private val configuration = dokkaConfiguration {
         sourceSets {
             sourceSet {
@@ -179,6 +175,24 @@ class SignatureTest : AbstractCoreTest() {
     }
 
     @Test
+    fun `fun with vararg`() {
+        val source = source("fun simpleFun(vararg params: Int): Unit")
+        val writerPlugin = TestOutputWriterPlugin()
+
+        testInline(
+            source,
+            configuration,
+            pluginOverrides = listOf(writerPlugin)
+        ) {
+            renderingStage = { _, _ ->
+                writerPlugin.writer.renderedContent("root/example/simple-fun.html").firstSignature().match(
+                    "fun ", A("simpleFun"), "(vararg params: ", A("Int"), ")", Span()
+                )
+            }
+        }
+    }
+
+    @Test
     fun `class with no supertype`() {
         val source = source("class SimpleClass")
         val writerPlugin = TestOutputWriterPlugin()
@@ -277,7 +291,7 @@ class SignatureTest : AbstractCoreTest() {
                     .firstSignature()
                     .match(
                         Div(
-                            Div("@", A("Marking"), "(", Span("msg = ", Span("\"Nenya\"")), Wbr, ")"),
+                            Div("@", A("Marking"), "(", Span("msg = ", Span("Nenya")), Wbr, ")"),
                             Div("@", A("Marking2"), "(", Span("int = ", Span("1")), Wbr, ")")
                         ),
                         "fun ", A("simpleFun"),
@@ -314,9 +328,9 @@ class SignatureTest : AbstractCoreTest() {
                         Div(
                             "@", A("Marking"), "(", Span(
                                 "msg = [",
-                                Span(Span("\"Nenya\""), ", "), Wbr,
-                                Span(Span("\"Vilya\""), ", "), Wbr,
-                                Span(Span("\"Narya\"")), Wbr, "]"
+                                Span(Span("Nenya"), ", "), Wbr,
+                                Span(Span("Vilya"), ", "), Wbr,
+                                Span(Span("Narya")), Wbr, "]"
                             ), Wbr, ")"
                         )
                     ),
@@ -394,6 +408,40 @@ class SignatureTest : AbstractCoreTest() {
         ) {
             renderingStage = { _, _ ->
                 writerPlugin.writer.renderedContent("root/example.html").signature().first().match(
+                    "typealias ", A("PlainTypealias"), " = ", A("Int"), Span()
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `plain typealias of plain class with annotation`() {
+
+        val writerPlugin = TestOutputWriterPlugin()
+
+        testInline(
+            """
+                |/src/main/kotlin/common/Test.kt
+                |package example
+                |
+                |@MustBeDocumented
+                |@Target(AnnotationTarget.TYPEALIAS)
+                |annotation class SomeAnnotation
+                |
+                |@SomeAnnotation
+                |typealias PlainTypealias = Int
+                |
+            """.trimMargin(),
+            configuration,
+            pluginOverrides = listOf(writerPlugin)
+        ) {
+            renderingStage = { _, _ ->
+                writerPlugin.writer.renderedContent("root/example/index.html").signature().first().match(
+                    Div(
+                        Div(
+                            "@", A("SomeAnnotation"), "()"
+                        )
+                    ),
                     "typealias ", A("PlainTypealias"), " = ", A("Int"), Span()
                 )
             }
@@ -554,7 +602,7 @@ class SignatureTest : AbstractCoreTest() {
             pluginOverrides = listOf(writerPlugin)
         ) {
             renderingStage = { _, _ ->
-                writerPlugin.writer.renderedContent("root/example.html").firstSignature().match(
+                writerPlugin.writer.renderedContent("root/example/index.html").firstSignature().match(
                     "const val ", A("simpleVal"), ": ", A("Int"), " = 1", Span()
                 )
             }

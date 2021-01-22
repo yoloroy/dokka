@@ -2,11 +2,11 @@ package content.signatures
 
 import matchers.content.*
 import org.jetbrains.dokka.pages.ContentPage
-import org.jetbrains.dokka.testApi.testRunner.AbstractCoreTest
+import org.jetbrains.dokka.base.testApi.testRunner.BaseAbstractTest
 import org.junit.jupiter.api.Test
 import utils.functionSignature
 
-class ConstructorsSignaturesTest : AbstractCoreTest() {
+class ConstructorsSignaturesTest : BaseAbstractTest() {
     private val testConfiguration = dokkaConfiguration {
         sourceSets {
             sourceSet {
@@ -35,7 +35,7 @@ class ConstructorsSignaturesTest : AbstractCoreTest() {
                         header(1) { +"SomeClass" }
                         platformHinted {
                             group {
-                                +"class"
+                                +"class "
                                 link { +"SomeClass" }
                             }
                         }
@@ -65,7 +65,7 @@ class ConstructorsSignaturesTest : AbstractCoreTest() {
                         header(1) { +"SomeClass" }
                         platformHinted {
                             group {
-                                +"class"
+                                +"class "
                                 link { +"SomeClass" }
                             }
                         }
@@ -95,9 +95,9 @@ class ConstructorsSignaturesTest : AbstractCoreTest() {
                         header(1) { +"SomeClass" }
                         platformHinted {
                             group {
-                                +"class"
+                                +"class "
                                 link { +"SomeClass" }
-                                +"(a:"
+                                +"(a: "
                                 group { link { +"String" } }
                                 +")"
                             }
@@ -128,9 +128,9 @@ class ConstructorsSignaturesTest : AbstractCoreTest() {
                         header(1) { +"SomeClass" }
                         platformHinted {
                             group {
-                                +"class"
+                                +"class "
                                 link { +"SomeClass" }
-                                +"(a:" // TODO: Make sure if we still do not want to have "val" here
+                                +"(a: " // TODO: Make sure if we still do not want to have "val" here
                                 group { link { +"String" } }
                                 +")"
                             }
@@ -162,9 +162,9 @@ class ConstructorsSignaturesTest : AbstractCoreTest() {
                         header(1) { +"SomeClass" }
                         platformHinted {
                             group {
-                                +"class"
+                                +"class "
                                 link { +"SomeClass" }
-                                +"(a:"
+                                +"(a: "
                                 group { link { +"String" } }
                                 +")"
                             }
@@ -212,14 +212,14 @@ class ConstructorsSignaturesTest : AbstractCoreTest() {
                     group {
                         header(1) { +"SomeClass" }
                         platformHinted {
-                            skipAllNotMatching()
                             group {
-                                +"class"
+                                +"class "
                                 link { +"SomeClass" }
-                                +"(a:"
+                                +"(a: "
                                 group { link { +"String" } }
                                 +")"
                             }
+                            skipAllNotMatching()
                         }
                     }
                     group {
@@ -229,18 +229,18 @@ class ConstructorsSignaturesTest : AbstractCoreTest() {
                                 link { +"SomeClass" }
                                 platformHinted {
                                     group {
-                                        group {
-                                            group { +"ctor comment" }
-                                        }
-                                    }
-                                    group {
-                                        +"fun"
+                                        +"fun "
                                         link { +"SomeClass" }
-                                        +"(a:"
+                                        +"(a: "
                                         group {
                                             link { +"String" }
                                         }
                                         +")"
+                                    }
+                                    group {
+                                        group {
+                                            group { +"ctor comment" }
+                                        }
                                     }
                                 }
                             }

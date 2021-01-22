@@ -5,12 +5,13 @@ import org.jetbrains.dokka.model.DModule
 import org.jetbrains.dokka.model.childrenOfType
 import org.jetbrains.dokka.model.doc.*
 import org.jetbrains.dokka.model.firstChildOfType
-import org.jetbrains.dokka.testApi.testRunner.AbstractCoreTest
+import org.jetbrains.dokka.model.firstMemberOfType
+import org.jetbrains.dokka.base.testApi.testRunner.BaseAbstractTest
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.*
 import utils.text
 
-class JavadocParserTest : AbstractCoreTest() {
+class JavadocParserTest : BaseAbstractTest() {
 
     private fun performJavadocTest(testOperation: (DModule) -> Unit) {
         val configuration = dokkaConfiguration {
@@ -113,6 +114,14 @@ class JavadocParserTest : AbstractCoreTest() {
             | * not fall within the indicated ranges; for example, a date may be
             | * specified as January 32 and is interpreted as meaning February 1.
             | *
+            | * <pre class="prettyprint">
+            | * class MyFragment extends Fragment {
+            | *   public MyFragment() {
+            | *     super(R.layout.fragment_main);
+            | *   }
+            | * }
+            | * </pre>
+            |
             | * @author  James Gosling
             | * @author  Arthur van Hoff
             | * @author  Alan Liu
@@ -144,9 +153,9 @@ class JavadocParserTest : AbstractCoreTest() {
         performJavadocTest { module ->
             val authors = module.findClasslike().documentation.values.single().childrenOfType<Author>()
             assertEquals(3, authors.size)
-            assertEquals("James Gosling", authors[0].firstChildOfType<Text>().text())
-            assertEquals("Arthur van Hoff", authors[1].firstChildOfType<Text>().text())
-            assertEquals("Alan Liu", authors[2].firstChildOfType<Text>().text())
+            assertEquals("James Gosling", authors[0].firstMemberOfType<Text>().text())
+            assertEquals("Arthur van Hoff", authors[1].firstMemberOfType<Text>().text())
+            assertEquals("Alan Liu", authors[2].firstMemberOfType<Text>().text())
         }
     }
 
@@ -177,4 +186,19 @@ class JavadocParserTest : AbstractCoreTest() {
             assertEquals(expectedText.trim(), preTagContent.body.trim())
         }
     }
+
+    @Test
+    fun `correctly parsed code block with curly braces (which PSI has problem with)`() {
+        performJavadocTest { module ->
+            val dateDescription = module.descriptionOf("Date2")!!
+            val preTagContent = dateDescription.childrenOfType<Pre>()[1].firstChildOfType<Text>()
+            val expectedText = """class MyFragment extends Fragment {
+  public MyFragment() {
+    super(R.layout.fragment_main);
+  }
+}""".trimIndent()
+            assertEquals(expectedText.trim(), preTagContent.body.trim())
+        }
+    }
+
 }

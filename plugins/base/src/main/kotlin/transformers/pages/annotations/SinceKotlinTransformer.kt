@@ -1,7 +1,9 @@
 package org.jetbrains.dokka.base.transformers.pages.annotations
 
+import org.intellij.markdown.MarkdownElementTypes
 import org.jetbrains.dokka.links.DRI
 import org.jetbrains.dokka.model.*
+import org.jetbrains.dokka.model.doc.CustomDocTag
 import org.jetbrains.dokka.model.doc.CustomTagWrapper
 import org.jetbrains.dokka.model.doc.Text
 import org.jetbrains.dokka.model.properties.WithExtraProperties
@@ -67,13 +69,22 @@ class SinceKotlinTransformer(val context: DokkaContext) : DocumentableTransforme
 
     private fun Documentable.appendSinceKotlin() =
         sourceSets.fold(documentation) { acc, sourceSet ->
-            safeAs<WithExtraProperties<Documentable>>()?.extra?.get(Annotations)?.content?.get(sourceSet)?.find {
+            safeAs<WithExtraProperties<Documentable>>()?.extra?.get(Annotations)?.directAnnotations?.get(sourceSet)?.find {
                 it.dri == DRI("kotlin", "SinceKotlin")
             }?.params?.get("version").safeAs<StringValue>()?.value?.let { version ->
                 acc.mapValues {
                     if (it.key == sourceSet) it.value.copy(
                         it.value.children + listOf(
-                            CustomTagWrapper(Text(version.dropWhile { it == '"' }.dropLastWhile { it == '"' }), "Since Kotlin")
+                            CustomTagWrapper(
+                                CustomDocTag(
+                                    listOf(
+                                        Text(version.dropWhile { it == '"' }.dropLastWhile { it == '"' }
+                                        )
+                                    ),
+                                    name = MarkdownElementTypes.MARKDOWN_FILE.name
+                                ),
+                                "Since Kotlin"
+                            )
                         )
                     ) else it.value
                 }

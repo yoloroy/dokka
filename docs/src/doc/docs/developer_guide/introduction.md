@@ -24,7 +24,9 @@ Here's how to import and configure Dokka in IntelliJ IDEA 2019.3:
   
 ## Configuration
 
-Dokka requires configured `Kotlin plugin` and `dokka-core` dependency. 
+tldr: you can use a convenient [plugin template](https://github.com/Kotlin/dokka-plugin-template) to speed up the setup.
+
+Dokka requires configured `Kotlin plugin` and `dokka-core` dependency.
 
 ```kotlin
 plugins {
@@ -42,7 +44,8 @@ tasks.withType<KotlinCompile> {
 
 ## Building sample plugin
 
-In order to load a plugin into Dokka, your class must extend `DokkaPlugin` class. All instances are automatically loaded during Dokka setup using `java.util.ServiceLoader`.
+In order to load a plugin into Dokka, your class must extend `DokkaPlugin` class. A fully qualified name of that class must be placed in a file named `org.jetbrains.dokka.plugability.DokkaPlugin` under `resources/META-INF/services`.
+All instances are automatically loaded during Dokka setup using `java.util.ServiceLoader`.
 
 Dokka provides a set of entry points, for which user can create their own implementations. They must be delegated using `DokkaPlugin.extending(definition: ExtendingDSL.() -> Extension<T, *, *>)` function,that returns a delegate `ExtensionProvider` with supplied definition. 
 

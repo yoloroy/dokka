@@ -128,7 +128,7 @@
                     <perPackageOptions>
                         <packageOptions>
                             <!-- Will match kotlin and all sub-packages of it -->
-                            <prefix>kotlin</prefix>
+                            <matchingRegex>kotlin</matchingRegex>
 
                             <!-- All options are optional, default values are below: -->
                             <skipDeprecated>false</skipDeprecated>
@@ -137,6 +137,17 @@
                             <includeNonPublic>false</includeNonPublic>
                         </packageOptions>
                     </perPackageOptions>
+                    <pluginsConfiguration>
+                        <org.jetbrains.dokka.base.DokkaBase>
+                            <customAssets>
+                                <customAsset>${project.basedir}/customResources/custom-resource.svg</customAsset>
+                            </customAssets>
+                            <customStyleSheets>
+                                <customStyleSheet>${project.basedir}/customResources/logo-styles.css</customStyleSheet>
+                                <customStyleSheet>${project.basedir}/customResources/custom-style-to-add.css</customStyleSheet>
+                            </customStyleSheets>
+                        </org.jetbrains.dokka.base.DokkaBase>
+                    </pluginsConfiguration>
                 </configuration>
             </plugin>
         </plugins>

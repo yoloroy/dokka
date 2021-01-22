@@ -1,5 +1,8 @@
 package org.jetbrains.dokka.links
 
+import com.fasterxml.jackson.annotation.JsonTypeInfo
+import com.fasterxml.jackson.annotation.JsonTypeInfo.Id.CLASS
+
 /**
  * [DRI] stands for DokkaResourceIdentifier
  */
@@ -16,6 +19,7 @@ data class DRI(
 
     companion object {
         val topLevel = DRI()
+
     }
 }
 
@@ -48,6 +52,7 @@ data class Callable(
     companion object
 }
 
+@JsonTypeInfo(use = CLASS)
 sealed class TypeReference {
     companion object
 }
@@ -78,6 +83,7 @@ object StarProjection : TypeReference() {
     override fun toString() = "*"
 }
 
+@JsonTypeInfo(use = CLASS)
 sealed class DriTarget {
     override fun toString(): String = this.javaClass.simpleName
 

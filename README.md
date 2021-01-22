@@ -7,7 +7,7 @@ and can generate documentation in multiple formats including standard Javadoc, H
 
 ## Using Dokka
 
-**Full documentation is available at [https://kotlin.github.io/dokka/1.4.10/](https://kotlin.github.io/dokka/1.4.10/)**
+**Full documentation is available at [https://kotlin.github.io/dokka/1.4.20/](https://kotlin.github.io/dokka/1.4.20/)**
 
 ### Using the Gradle plugin
 _Note: If you are upgrading from 0.10.x to a current release of Dokka, please have a look at our 
@@ -19,7 +19,7 @@ you not only need to add `org.jetbrains.dokka` to the `build.gradle.kts` file, b
 build.gradle.kts:
 ```kotlin
 plugins {
-    id("org.jetbrains.dokka") version "1.4.10"
+    id("org.jetbrains.dokka") version "1.4.20"
 }
 
 repositories {
@@ -44,7 +44,7 @@ Dokka plugin creates Gradle configuration for each output format in the form of 
 
 ```kotlin
 dependencies {
-    dokkaHtmlPlugin("org.jetbrains.dokka:kotlin-as-java-plugin:1.4.10")
+    dokkaHtmlPlugin("org.jetbrains.dokka:kotlin-as-java-plugin:1.4.20")
 }
 ``` 
 
@@ -53,7 +53,7 @@ You can also create a custom Dokka task and add plugins directly inside:
 ```kotlin
 val customDokkaTask by creating(DokkaTask::class) {
     dependencies {
-        plugins("org.jetbrains.dokka:kotlin-as-java-plugin:1.4.10")
+        plugins("org.jetbrains.dokka:kotlin-as-java-plugin:1.4.20")
     }
 }
 ```
@@ -67,6 +67,8 @@ To generate the documentation, use the appropriate `dokka${format}` Gradle task:
 ```
 
 Please see the [Dokka Gradle example project](https://github.com/Kotlin/kotlin-examples/tree/master/gradle/dokka/dokka-gradle-example) for an example.
+
+We encourage users to create their own plugins and share them with the community on [official plugins list](docs/src/doc/docs/community/plugins-list.md).
 
 #### Android
 
@@ -106,11 +108,10 @@ For documenting Gradle multi-module projects, you can use `dokka${format}Multimo
 ```kotlin
 tasks.dokkaHtmlMultiModule.configure {
     outputDirectory.set(buildDir.resolve("dokkaCustomMultiModuleOutput"))
-    documentationFileName.set("README.md")
 }
 ```
 
-`DokkaMultiModule` depends on all Dokka tasks in the subprojects, runs them, and creates a toplevel page (based on the `documentationFile`)
+`DokkaMultiModule` depends on all Dokka tasks in the subprojects, runs them, and creates a toplevel page
 with links to all generated (sub)documentations
 
 ### Using the Maven plugin
@@ -169,7 +170,7 @@ Please see the [Dokka Maven example project](https://github.com/JetBrains/kotlin
 
 ### Using the Command Line
 
-To run Dokka from the command line, download the [Dokka CLI runner](https://github.com/Kotlin/dokka/releases/download/v1.4.10/dokka-cli-1.4.10.jar).
+To run Dokka from the command line, download the [Dokka CLI runner](https://mvnrepository.com/artifact/org.jetbrains.dokka/dokka-cli).
 To generate documentation, run the following command:
 ```
 java -jar dokka-cli.jar <arguments>

@@ -1,16 +1,22 @@
 package content.annotations
 
 import matchers.content.*
+import org.jetbrains.dokka.base.testApi.testRunner.BaseAbstractTest
+import org.jetbrains.dokka.links.DRI
+import org.jetbrains.dokka.model.Annotations
+import org.jetbrains.dokka.model.StringValue
 import org.jetbrains.dokka.pages.ContentPage
 import org.jetbrains.dokka.pages.PackagePageNode
-import org.jetbrains.dokka.testApi.testRunner.AbstractCoreTest
+import org.jetbrains.kotlin.utils.addToStdlib.firstNotNullResult
 import org.junit.jupiter.api.Test
 import utils.ParamAttributes
 import utils.bareSignature
 import utils.propertySignature
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 
-class ContentForAnnotationsTest : AbstractCoreTest() {
+class ContentForAnnotationsTest : BaseAbstractTest() {
 
 
     private val testConfiguration = dokkaConfiguration {
@@ -18,6 +24,7 @@ class ContentForAnnotationsTest : AbstractCoreTest() {
             sourceSet {
                 sourceRoots = listOf("src/")
                 analysisPlatform = "jvm"
+                classpath += jvmStdlibPath!!
             }
         }
     }
@@ -132,7 +139,7 @@ class ContentForAnnotationsTest : AbstractCoreTest() {
             pagesTransformationStage = { module ->
                 val page = module.children.single { it.name == "test" } as PackagePageNode
                 page.content.assertNode {
-                    propertySignature(emptyMap(), "", "", emptySet(), "val", "property", "Int")
+                    propertySignature(emptyMap(), "", "", emptySet(), "val", "property", "Int", "6")
                 }
             }
         }
@@ -155,7 +162,7 @@ class ContentForAnnotationsTest : AbstractCoreTest() {
             pagesTransformationStage = { module ->
                 val page = module.children.single { it.name == "test" } as PackagePageNode
                 page.content.assertNode {
-                    propertySignature(mapOf("Fancy" to emptySet()), "", "", emptySet(), "val", "property", "Int")
+                    propertySignature(mapOf("Fancy" to emptySet()), "", "", emptySet(), "val", "property", "Int", "6")
                 }
             }
         }
@@ -212,9 +219,48 @@ class ContentForAnnotationsTest : AbstractCoreTest() {
                                 "reportedBy",
                                 "showStopper"
                             )
-                        ), "", "", emptySet(), "val", "ltint", "Int"
+                        ), "", "", emptySet(), "val", "ltint", "Int", "5"
                     )
                 }
+            }
+        }
+    }
+
+    @Test
+    fun `JvmName for property with setter and getter`(){
+        testInline(
+            """
+                |/src/main/kotlin/test/source.kt
+                |package test
+                |@get:JvmName("xd")
+                |@set:JvmName("asd")
+                |var property: String
+                |    get() = ""
+                |    set(value) {}
+            """.trimIndent(), testConfiguration) {
+            documentablesCreationStage = { modules ->
+                fun expectedAnnotation(name: String) = Annotations.Annotation(
+                    dri = DRI("kotlin.jvm", "JvmName"),
+                    params = mapOf("name" to StringValue(name)),
+                    scope = Annotations.AnnotationScope.DIRECT,
+                    mustBeDocumented = true
+                )
+
+                val property = modules.flatMap { it.packages }.flatMap { it.properties }.first()
+                val getterAnnotation = property.getter?.extra?.get(Annotations)?.let {
+                    it.directAnnotations.entries.firstNotNullResult { (_, annotations) -> annotations.firstOrNull() }
+                }
+                val setterAnnotation = property.getter?.extra?.get(Annotations)?.let {
+                    it.directAnnotations.entries.firstNotNullResult { (_, annotations) -> annotations.firstOrNull() }
+                }
+
+                assertEquals(expectedAnnotation("xd"), getterAnnotation)
+                assertTrue(getterAnnotation?.mustBeDocumented!!)
+                assertEquals(Annotations.AnnotationScope.DIRECT, getterAnnotation.scope)
+
+                assertEquals(expectedAnnotation("asd"), setterAnnotation)
+                assertTrue(setterAnnotation?.mustBeDocumented!!)
+                assertEquals(Annotations.AnnotationScope.DIRECT, setterAnnotation.scope)
             }
         }
     }

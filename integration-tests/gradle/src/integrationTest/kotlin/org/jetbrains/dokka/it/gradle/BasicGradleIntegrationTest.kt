@@ -25,6 +25,8 @@ class BasicGradleIntegrationTest(override val versions: BuildVersions) : Abstrac
             .forEach { topLevelFile -> topLevelFile.copyTo(File(projectDir, topLevelFile.name)) }
 
         File(templateProjectDir, "src").copyRecursively(File(projectDir, "src"))
+        val customResourcesDir = File(templateProjectDir, "customResources")
+        if(customResourcesDir.exists() && customResourcesDir.isDirectory) customResourcesDir.copyRecursively(File(projectDir, "customResources"))
     }
 
     @Test
@@ -51,9 +53,13 @@ class BasicGradleIntegrationTest(override val versions: BuildVersions) : Abstrac
 
         val scriptsDir = File(this, "scripts")
         assertTrue(scriptsDir.isDirectory, "Missing scripts directory")
+        val reactFile = File(this, "scripts/main.js")
+        assertTrue(reactFile.isFile, "Missing main.js")
 
         val stylesDir = File(this, "styles")
         assertTrue(stylesDir.isDirectory, "Missing styles directory")
+        val reactStyles = File(this, "styles/main.css")
+        assertTrue(reactStyles.isFile, "Missing main.css")
 
         val navigationHtml = File(this, "navigation.html")
         assertTrue(navigationHtml.isFile, "Missing navigation.html")
@@ -61,7 +67,7 @@ class BasicGradleIntegrationTest(override val versions: BuildVersions) : Abstrac
         val moduleOutputDir = File(this, "-basic -project")
         assertTrue(moduleOutputDir.isDirectory, "Missing module directory")
 
-        val moduleIndexHtml = File(moduleOutputDir, "index.html")
+        val moduleIndexHtml = File(this, "index.html")
         assertTrue(moduleIndexHtml.isFile, "Missing module index.html")
 
         val modulePackageDir = File(moduleOutputDir, "it.basic")
@@ -104,6 +110,25 @@ class BasicGradleIntegrationTest(override val versions: BuildVersions) : Abstrac
             },
             "Expected `SampleJavaClass` source link to GitHub"
         )
+
+        val anchorsShouldNotHaveHashes = "<a data-name=\".*#.*\"\\sanchor-label=\"*.*\">".toRegex()
+        assertTrue(
+            allHtmlFiles().all { file ->
+                !anchorsShouldNotHaveHashes.containsMatchIn(file.readText())
+            },
+            "Anchors should not have hashes inside"
+        )
+
+        assertEquals(
+            """#logo{background-image:url('https://upload.wikimedia.org/wikipedia/commons/9/9d/Ubuntu_logo.svg');}""",
+            stylesDir.resolve("logo-styles.css").readText().replace("\\s".toRegex(), ""),
+        )
+        assertTrue(stylesDir.resolve("custom-style-to-add.css").isFile)
+        assertEquals("""/* custom stylesheet */""", stylesDir.resolve("custom-style-to-add.css").readText())
+        allHtmlFiles().forEach { file ->
+            if(file.name != "navigation.html") assertTrue("custom-style-to-add.css" in file.readText(), "custom styles not added to html file ${file.name}")
+        }
+        assertTrue(imagesDir.resolve("custom-resource.svg").isFile)
     }
 
     private fun File.assertJavadocOutputDir() {

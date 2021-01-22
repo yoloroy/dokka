@@ -1,32 +1,35 @@
 package org.jetbrains.dokka.base.renderers.html
 
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.html.*
 import kotlinx.html.stream.createHTML
 import org.jetbrains.dokka.DokkaSourceSetID
 import org.jetbrains.dokka.base.DokkaBase
+import org.jetbrains.dokka.base.DokkaBaseConfiguration
+import org.jetbrains.dokka.base.DokkaBaseConfiguration.Companion.defaultFooterMessage
 import org.jetbrains.dokka.base.renderers.DefaultRenderer
 import org.jetbrains.dokka.base.renderers.TabSortingStrategy
+import org.jetbrains.dokka.base.renderers.html.command.consumers.ImmediateResolutionTagConsumer
 import org.jetbrains.dokka.base.renderers.isImage
+import org.jetbrains.dokka.base.renderers.pageId
+import org.jetbrains.dokka.base.resolvers.anchors.SymbolAnchorHint
+import org.jetbrains.dokka.base.resolvers.local.DokkaBaseLocationProvider
+import org.jetbrains.dokka.base.templating.InsertTemplateExtra
+import org.jetbrains.dokka.base.templating.PathToRootSubstitutionCommand
+import org.jetbrains.dokka.base.templating.ResolveLinkCommand
 import org.jetbrains.dokka.links.DRI
 import org.jetbrains.dokka.model.DisplaySourceSet
 import org.jetbrains.dokka.model.properties.PropertyContainer
 import org.jetbrains.dokka.model.sourceSetIDs
 import org.jetbrains.dokka.model.withDescendants
 import org.jetbrains.dokka.pages.*
-import org.jetbrains.dokka.plugability.DokkaContext
-import org.jetbrains.dokka.plugability.plugin
-import org.jetbrains.dokka.plugability.query
-import org.jetbrains.dokka.plugability.querySingle
+import org.jetbrains.dokka.plugability.*
 import org.jetbrains.dokka.utilities.htmlEscape
-import java.io.File
 import java.net.URI
 
 open class HtmlRenderer(
     context: DokkaContext
 ) : DefaultRenderer<FlowContent>(context) {
+    private val configuration = configuration<DokkaBase, DokkaBaseConfiguration>(context)
 
     private val sourceSetDependencyMap: Map<DokkaSourceSetID, List<DokkaSourceSetID>> =
         context.configuration.sourceSets.map { sourceSet ->
@@ -39,9 +42,11 @@ open class HtmlRenderer(
 
     override val preprocessors = context.plugin<DokkaBase>().query { htmlPreprocessors }
 
-    val searchbarDataInstaller = SearchbarDataInstaller()
-
     private val tabSortingStrategy = context.plugin<DokkaBase>().querySingle { tabSortingStrategy }
+
+    private fun <R> TagConsumer<R>.prepareForTemplates() =
+        if (context.configuration.delayTemplateSubstitution || this is ImmediateResolutionTagConsumer) this
+        else ImmediateResolutionTagConsumer(this, context)
 
     private fun <T : ContentNode> sortTabs(strategy: TabSortingStrategy, tabs: Collection<T>): List<T> {
         val sorted = strategy.sort(tabs)
@@ -97,18 +102,24 @@ open class HtmlRenderer(
             node.hasStyle(TextStyle.Span) -> span() { childrenCallback() }
             node.dci.kind == ContentKind.Symbol -> div("symbol $additionalClasses") { childrenCallback() }
             node.dci.kind == ContentKind.BriefComment -> div("brief $additionalClasses") { childrenCallback() }
-            node.dci.kind == ContentKind.Cover -> div("cover $additionalClasses") {
-                filterButtons(pageContext)
+            node.dci.kind == ContentKind.Cover -> div("cover $additionalClasses") { //TODO this can be removed
                 childrenCallback()
             }
             node.hasStyle(TextStyle.Paragraph) -> p(additionalClasses) { childrenCallback() }
             node.hasStyle(TextStyle.Block) -> div(additionalClasses) { childrenCallback() }
+            node.isAnchorable -> buildAnchor(
+                node.anchor!!,
+                node.anchorLabel!!,
+                node.sourceSetsFilters
+            ) { childrenCallback() }
+            node.extra[InsertTemplateExtra] != null -> node.extra[InsertTemplateExtra]?.let { templateCommand(it.command) }
+                ?: Unit
             else -> childrenCallback()
         }
     }
 
-    private fun FlowContent.filterButtons(page: ContentPage) {
-        if (shouldRenderSourceSetBubbles) {
+    private fun FlowContent.filterButtons(page: PageNode) {
+        if (shouldRenderSourceSetBubbles && page is ContentPage) {
             div(classes = "filter-section") {
                 id = "filter-section"
                 page.content.withDescendants().flatMap { it.sourceSets }.distinct().forEach {
@@ -129,33 +140,22 @@ open class HtmlRenderer(
     }
 
     private fun FlowContent.copyButton() = span(classes = "top-right-position") {
-        span("copy-icon") {
-            unsafe {
-                raw(
-                    """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path fill-rule="evenodd" clip-rule="evenodd" d="M5 4H15V16H5V4ZM17 7H19V18V20H17H8V18H17V7Z" fill="black"/>
-                       </svg>""".trimIndent()
-                )
-            }
-        }
+        span("copy-icon")
         copiedPopup("Content copied to clipboard", "popup-to-left")
     }
 
     private fun FlowContent.copiedPopup(notificationContent: String, additionalClasses: String = "") =
         div("copy-popup-wrapper $additionalClasses") {
-            unsafe {
-                raw(
-                    """
-                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M18 9C18 14 14 18 9 18C4 18 0 14 0 9C0 4 4 0 9 0C14 0 18 4 18 9ZM14.2 6.2L12.8 4.8L7.5 10.1L5.3 7.8L3.8 9.2L7.5 13L14.2 6.2Z" fill="#4DBB5F"/>
-                    </svg>
-                    """.trimIndent()
-                )
-            }
+            span("copy-popup-icon")
             span {
                 text(notificationContent)
             }
         }
+
+    fun FlowContent.withHtml(content: String): Unit = when (this) {
+        is HTMLTag -> unsafe { +content }
+        else -> div { unsafe { +content } }
+    }
 
     override fun FlowContent.buildPlatformDependent(
         content: PlatformHintedContent,
@@ -217,7 +217,7 @@ open class HtmlRenderer(
     ): List<Pair<DisplaySourceSet, String>> {
         var counter = 0
         return nodes.toList().map { (sourceSet, elements) ->
-            sourceSet to createHTML(prettyPrint = false).div {
+            sourceSet to createHTML(prettyPrint = false).prepareForTemplates().div {
                 elements.forEach {
                     buildContentNode(it, pageContext, sourceSet.toSet())
                 }
@@ -230,13 +230,14 @@ open class HtmlRenderer(
                 sourceSet.sourceSetIDs.all.flatMap { sourceSetDependencyMap[it].orEmpty() }
                     .any { sourceSetId -> sourceSetId in sourceSets.sourceSetIDs }
             }.map {
-                it to createHTML(prettyPrint = false).div(classes = "content sourceset-depenent-content") {
-                    if (counter++ == 0) attributes["data-active"] = ""
-                    attributes["data-togglable"] = it.sourceSetIDs.merged.toString()
-                    unsafe {
-                        +html
+                it to createHTML(prettyPrint = false).prepareForTemplates()
+                    .div(classes = "content sourceset-depenent-content") {
+                        if (counter++ == 0) attributes["data-active"] = ""
+                        attributes["data-togglable"] = it.sourceSetIDs.merged.toString()
+                        unsafe {
+                            +html
+                        }
                     }
-                }
             }
         }
     }
@@ -245,13 +246,13 @@ open class HtmlRenderer(
 
         val distinct =
             node.groupDivergentInstances(pageContext, { instance, contentPage, sourceSet ->
-                createHTML(prettyPrint = false).div {
+                createHTML(prettyPrint = false).prepareForTemplates().div {
                     instance.before?.let { before ->
                         buildContentNode(before, pageContext, sourceSet)
                     }
                 }.stripDiv()
             }, { instance, contentPage, sourceSet ->
-                createHTML(prettyPrint = false).div {
+                createHTML(prettyPrint = false).prepareForTemplates().div {
                     instance.after?.let { after ->
                         buildContentNode(after, pageContext, sourceSet)
                     }
@@ -262,7 +263,7 @@ open class HtmlRenderer(
             val groupedDivergent = it.value.groupBy { it.second }
 
             consumer.onTagContentUnsafe {
-                +createHTML().div("divergent-group") {
+                +createHTML().prepareForTemplates().div("divergent-group") {
                     attributes["data-filterable-current"] = groupedDivergent.keys.joinToString(" ") {
                         it.sourceSetIDs.merged.toString()
                     }
@@ -277,15 +278,11 @@ open class HtmlRenderer(
                     val content = contentsForSourceSetDependent(divergentForPlatformDependent, pageContext)
 
                     consumer.onTagContentUnsafe {
-                        +createHTML().div("brief-with-platform-tags") {
-                            consumer.onTagContentUnsafe {
-                                +createHTML().div("inner-brief-with-platform-tags") {
-                                    consumer.onTagContentUnsafe { +it.key.first }
-                                }
-                            }
+                        +createHTML().prepareForTemplates().div("with-platform-tags") {
+                            consumer.onTagContentUnsafe { +it.key.first }
 
                             consumer.onTagContentUnsafe {
-                                +createHTML().span("pull-right") {
+                                +createHTML().prepareForTemplates().span("pull-right") {
                                     if ((distinct.size > 1 && groupedDivergent.size == 1) || groupedDivergent.size == 1 || content.size == 1) {
                                         if (node.sourceSets.size != 1) {
                                             createPlatformTags(node, setOf(content.first().first))
@@ -295,7 +292,7 @@ open class HtmlRenderer(
                             }
                         }
                     }
-                    div("main-subrow") {
+                    div {
                         if (node.implicitlySourceSetHinted) {
                             buildPlatformDependent(divergentForPlatformDependent, pageContext)
                         } else {
@@ -365,64 +362,138 @@ open class HtmlRenderer(
             .filter { sourceSetRestriction == null || it.sourceSets.any { s -> s in sourceSetRestriction } }
             .takeIf { it.isNotEmpty() }
             ?.let {
-                val anchorName = node.dci.dri.first().toString()
-                withAnchor(anchorName) {
-                    div(classes = "table-row") {
-                        if (!style.contains(MultimoduleTable)) {
-                            attributes["data-filterable-current"] = node.sourceSets.joinToString(" ") {
-                                it.sourceSetIDs.merged.toString()
-                            }
-                            attributes["data-filterable-set"] = node.sourceSets.joinToString(" ") {
-                                it.sourceSetIDs.merged.toString()
-                            }
-                        }
-
-                        it.filterIsInstance<ContentLink>().takeIf { it.isNotEmpty() }?.let {
-                            div("main-subrow " + node.style.joinToString(" ")) {
-                                it.filter { sourceSetRestriction == null || it.sourceSets.any { s -> s in sourceSetRestriction } }
-                                    .forEach {
-                                        span {
-                                            it.build(this, pageContext, sourceSetRestriction)
-                                            buildAnchor(anchorName)
-                                        }
-                                        if (ContentKind.shouldBePlatformTagged(node.dci.kind) && (node.sourceSets.size == 1 || pageContext is ModulePage))
-                                            createPlatformTags(node)
-                                    }
-                            }
-                        }
-
-                        it.filter { it !is ContentLink }.takeIf { it.isNotEmpty() }?.let {
-                            if (pageContext is ModulePage || pageContext is MultimoduleRootPage) {
-                                it.forEach {
-                                    span(classes = if (it.dci.kind == ContentKind.Comment) "brief-comment" else "") {
-                                        it.build(this, pageContext, sourceSetRestriction)
-                                    }
-                                }
-                            } else {
-                                div("platform-dependent-row keyValue") {
-                                    val title = it.filter { it.style.contains(ContentStyle.RowTitle) }
-                                    div {
-                                        title.forEach {
-                                            it.build(this, pageContext, sourceSetRestriction)
-                                        }
-                                    }
-                                    div("title") {
-                                        (it - title).forEach {
-                                            it.build(this, pageContext, sourceSetRestriction)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+                when (pageContext) {
+                    is MultimoduleRootPage -> buildRowForMultiModule(node, it, pageContext, sourceSetRestriction, style)
+                    is ModulePage -> buildRowForModule(node, it, pageContext, sourceSetRestriction, style)
+                    else -> buildRowForContent(node, it, pageContext, sourceSetRestriction, style)
                 }
             }
     }
 
-    private fun FlowContent.createPlatformTagBubbles(sourceSets: List<DisplaySourceSet>) {
+    private fun FlowContent.buildRowForMultiModule(
+        contextNode: ContentGroup,
+        toRender: List<ContentNode>,
+        pageContext: ContentPage,
+        sourceSetRestriction: Set<DisplaySourceSet>?,
+        style: Set<Style>
+    ) {
+        buildAnchor(contextNode)
+        div(classes = "table-row") {
+            div("main-subrow " + contextNode.style.joinToString(separator = " ")) {
+                buildRowHeaderLink(toRender, pageContext, sourceSetRestriction, contextNode.anchor, "w-100")
+                div {
+                    buildRowBriefSectionForDocs(toRender, pageContext, sourceSetRestriction)
+                }
+            }
+        }
+    }
+
+    private fun FlowContent.buildRowForModule(
+        contextNode: ContentGroup,
+        toRender: List<ContentNode>,
+        pageContext: ContentPage,
+        sourceSetRestriction: Set<DisplaySourceSet>?,
+        style: Set<Style>
+    ) {
+        buildAnchor(contextNode)
+        div(classes = "table-row") {
+            addSourceSetFilteringAttributes(contextNode)
+            div {
+                div("main-subrow " + contextNode.style.joinToString(separator = " ")) {
+                    buildRowHeaderLink(toRender, pageContext, sourceSetRestriction, contextNode.anchor)
+                    div("pull-right") {
+                        if (ContentKind.shouldBePlatformTagged(contextNode.dci.kind)) {
+                            createPlatformTags(contextNode, cssClasses = "no-gutters")
+                        }
+                    }
+                }
+                div {
+                    buildRowBriefSectionForDocs(toRender, pageContext, sourceSetRestriction)
+                }
+            }
+        }
+    }
+
+    private fun FlowContent.buildRowForContent(
+        contextNode: ContentGroup,
+        toRender: List<ContentNode>,
+        pageContext: ContentPage,
+        sourceSetRestriction: Set<DisplaySourceSet>?,
+        style: Set<Style>
+    ) {
+        buildAnchor(contextNode)
+        div(classes = "table-row") {
+            addSourceSetFilteringAttributes(contextNode)
+            div("main-subrow keyValue " + contextNode.style.joinToString(separator = " ")) {
+                buildRowHeaderLink(toRender, pageContext, sourceSetRestriction, contextNode.anchor)
+                div {
+                    toRender.filter { it !is ContentLink && !it.hasStyle(ContentStyle.RowTitle) }
+                        .takeIf { it.isNotEmpty() }?.let {
+                            if (ContentKind.shouldBePlatformTagged(contextNode.dci.kind) && contextNode.sourceSets.size == 1)
+                                createPlatformTags(contextNode)
+
+                            div("title") {
+                                it.forEach {
+                                    it.build(this, pageContext, sourceSetRestriction)
+                                }
+                            }
+                        }
+                }
+            }
+        }
+    }
+
+    private fun FlowContent.buildRowHeaderLink(
+        toRender: List<ContentNode>,
+        pageContext: ContentPage,
+        sourceSetRestriction: Set<DisplaySourceSet>?,
+        anchorDestination: String?,
+        classes: String = ""
+    ) {
+        toRender.filter { it is ContentLink || it.hasStyle(ContentStyle.RowTitle) }.takeIf { it.isNotEmpty() }?.let {
+            div(classes) {
+                it.filter { sourceSetRestriction == null || it.sourceSets.any { s -> s in sourceSetRestriction } }
+                    .forEach {
+                        span("inline-flex") {
+                            it.build(this, pageContext, sourceSetRestriction)
+                            if (it is ContentLink && !anchorDestination.isNullOrBlank()) buildAnchorCopyButton(
+                                anchorDestination
+                            )
+                        }
+                    }
+            }
+        }
+    }
+
+    private fun FlowContent.addSourceSetFilteringAttributes(
+        contextNode: ContentGroup,
+    ) {
+        attributes["data-filterable-current"] = contextNode.sourceSets.joinToString(" ") {
+            it.sourceSetIDs.merged.toString()
+        }
+        attributes["data-filterable-set"] = contextNode.sourceSets.joinToString(" ") {
+            it.sourceSetIDs.merged.toString()
+        }
+    }
+
+    private fun FlowContent.buildRowBriefSectionForDocs(
+        toRender: List<ContentNode>,
+        pageContext: ContentPage,
+        sourceSetRestriction: Set<DisplaySourceSet>?,
+    ) {
+        toRender.filter { it !is ContentLink }.takeIf { it.isNotEmpty() }?.let {
+            it.forEach {
+                span(classes = if (it.dci.kind == ContentKind.Comment) "brief-comment" else "") {
+                    it.build(this, pageContext, sourceSetRestriction)
+                }
+            }
+        }
+    }
+
+    private fun FlowContent.createPlatformTagBubbles(sourceSets: List<DisplaySourceSet>, cssClasses: String = "") {
         if (shouldRenderSourceSetBubbles) {
-            div("platform-tags") {
-                sourceSets.forEach {
+            div("platform-tags " + cssClasses) {
+                sourceSets.sortedBy { it.name }.forEach {
                     div("platform-tag") {
                         when (it.platform.key) {
                             "common" -> classes = classes + "common-like"
@@ -439,12 +510,13 @@ open class HtmlRenderer(
 
     private fun FlowContent.createPlatformTags(
         node: ContentNode,
-        sourceSetRestriction: Set<DisplaySourceSet>? = null
+        sourceSetRestriction: Set<DisplaySourceSet>? = null,
+        cssClasses: String = ""
     ) {
         node.takeIf { sourceSetRestriction == null || it.sourceSets.any { s -> s in sourceSetRestriction } }?.let {
             createPlatformTagBubbles(node.sourceSets.filter {
                 sourceSetRestriction == null || it in sourceSetRestriction
-            })
+            }.sortedBy { it.name }, cssClasses)
         }
     }
 
@@ -453,8 +525,8 @@ open class HtmlRenderer(
         pageContext: ContentPage,
         sourceSetRestriction: Set<DisplaySourceSet>?
     ) {
-        when (node.dci.kind) {
-            ContentKind.Comment -> buildDefaultTable(node, pageContext, sourceSetRestriction)
+        when {
+            node.style.contains(CommentTable) -> buildDefaultTable(node, pageContext, sourceSetRestriction)
             else -> div(classes = "table") {
                 node.extra.extraHtmlAttributes().forEach { attributes[it.extraKey] = it.extraValue }
                 node.children.forEach {
@@ -498,34 +570,57 @@ open class HtmlRenderer(
 
 
     override fun FlowContent.buildHeader(level: Int, node: ContentHeader, content: FlowContent.() -> Unit) {
-        val anchor = node.extra[SimpleAttr.SimpleAttrKey("anchor")]?.extraValue
         val classes = node.style.joinToString { it.toString() }.toLowerCase()
         when (level) {
-            1 -> h1(classes = classes) { withAnchor(anchor, content) }
-            2 -> h2(classes = classes) { withAnchor(anchor, content) }
-            3 -> h3(classes = classes) { withAnchor(anchor, content) }
-            4 -> h4(classes = classes) { withAnchor(anchor, content) }
-            5 -> h5(classes = classes) { withAnchor(anchor, content) }
-            else -> h6(classes = classes) { withAnchor(anchor, content) }
+            1 -> h1(classes = classes, content)
+            2 -> h2(classes = classes, content)
+            3 -> h3(classes = classes, content)
+            4 -> h4(classes = classes, content)
+            5 -> h5(classes = classes, content)
+            else -> h6(classes = classes, content)
         }
     }
 
-    private fun FlowContent.withAnchor(anchorName: String?, content: FlowContent.() -> Unit) {
+    private fun FlowContent.buildAnchor(
+        anchor: String,
+        anchorLabel: String,
+        sourceSets: String,
+        content: FlowContent.() -> Unit
+    ) {
         a {
-            anchorName?.let { attributes["data-name"] = it }
+            attributes["data-name"] = anchor
+            attributes["anchor-label"] = anchorLabel
+            attributes["id"] = anchor
+            attributes["data-filterable-set"] = sourceSets
         }
         content()
     }
 
+    private fun FlowContent.buildAnchor(anchor: String, anchorLabel: String, sourceSets: String) =
+        buildAnchor(anchor, anchorLabel, sourceSets) {}
+
+    private fun FlowContent.buildAnchor(node: ContentNode) {
+        node.anchorLabel?.let { label -> buildAnchor(node.anchor!!, label, node.sourceSetsFilters) }
+    }
+
 
     override fun FlowContent.buildNavigation(page: PageNode) =
-        div(classes = "breadcrumbs") {
-            val path = locationProvider.ancestors(page).filterNot { it is RendererSpecificPage }.asReversed()
-            if (path.isNotEmpty()) {
-                buildNavigationElement(path.first(), page)
-                path.drop(1).forEach { node ->
-                    text("/")
-                    buildNavigationElement(node, page)
+        div("navigation-wrapper") {
+            id = "navigation-wrapper"
+            div(classes = "breadcrumbs") {
+                val path = locationProvider.ancestors(page).filterNot { it is RendererSpecificPage }.asReversed()
+                if (path.isNotEmpty()) {
+                    buildNavigationElement(path.first(), page)
+                    path.drop(1).forEach { node ->
+                        text("/")
+                        buildNavigationElement(node, page)
+                    }
+                }
+            }
+            div("pull-right d-flex") {
+                filterButtons(page)
+                div {
+                    id = "searchBar"
                 }
             }
         }
@@ -544,20 +639,10 @@ open class HtmlRenderer(
             text(to.name)
         }
 
-    fun FlowContent.buildAnchor(pointingTo: String) {
+    fun FlowContent.buildAnchorCopyButton(pointingTo: String) {
         span(classes = "anchor-wrapper") {
             span(classes = "anchor-icon") {
                 attributes["pointing-to"] = pointingTo
-                unsafe {
-                    raw(
-                        """
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M21.2496 5.3C20.3496 4.5 19.2496 4 18.0496 4C16.8496 4 15.6496 4.5 14.8496 5.3L10.3496 9.8L11.7496 11.2L16.2496 6.7C17.2496 5.7 18.8496 5.7 19.8496 6.7C20.8496 7.7 20.8496 9.3 19.8496 10.3L15.3496 14.8L16.7496 16.2L21.2496 11.7C22.1496 10.8 22.5496 9.7 22.5496 8.5C22.5496 7.3 22.1496 6.2 21.2496 5.3Z"/>
-                    <path d="M8.35 16.7998C7.35 17.7998 5.75 17.7998 4.75 16.7998C3.75 15.7998 3.75 14.1998 4.75 13.1998L9.25 8.6998L7.85 7.2998L3.35 11.7998C1.55 13.5998 1.55 16.3998 3.35 18.1998C4.25 19.0998 5.35 19.4998 6.55 19.4998C7.75 19.4998 8.85 19.0998 9.75 18.1998L14.25 13.6998L12.85 12.2998L8.35 16.7998Z"/>
-                </svg>
-            """.trimIndent()
-                    )
-                }
             }
             copiedPopup("Link copied to clipboard")
         }
@@ -571,17 +656,12 @@ open class HtmlRenderer(
     ) = locationProvider.resolve(to, platforms.toSet(), from)?.let { buildLink(it, block) }
         ?: run { context.logger.error("Cannot resolve path for `$to` from `$from`"); block() }
 
-    override fun buildError(node: ContentNode) {
-        context.logger.error("Unknown ContentNode type: $node")
-    }
+    override fun buildError(node: ContentNode) = context.logger.error("Unknown ContentNode type: $node")
 
-    override fun FlowContent.buildNewLine() {
-        br()
-    }
+    override fun FlowContent.buildNewLine() = br()
 
     override fun FlowContent.buildLink(address: String, content: FlowContent.() -> Unit) =
         a(href = address, block = content)
-
 
     override fun FlowContent.buildDRILink(
         node: ContentDRILink,
@@ -591,9 +671,15 @@ open class HtmlRenderer(
         buildLink(address) {
             buildText(node.children, pageContext, sourceSetRestriction)
         }
-    } ?: span {
-        attributes["data-unresolved-link"] = node.address.toString().htmlEscape()
-        buildText(node.children, pageContext, sourceSetRestriction)
+    } ?: if (isPartial) {
+        templateCommand(ResolveLinkCommand(node.address)) {
+            buildText(node.children, pageContext, sourceSetRestriction)
+        }
+    } else {
+        span {
+            attributes["data-unresolved-link"] = node.address.toString().htmlEscape()
+            buildText(node.children, pageContext, sourceSetRestriction)
+        }
     }
 
     override fun FlowContent.buildCodeBlock(
@@ -619,14 +705,6 @@ open class HtmlRenderer(
         }
     }
 
-
-    override suspend fun renderPage(page: PageNode) {
-        super.renderPage(page)
-        if (page is ContentPage && page !is ModulePageNode && page !is PackagePageNode)
-            searchbarDataInstaller.processPage(page, locationProvider.resolve(page)
-                ?: run { context.logger.error("Cannot resolve path for ${page.dri}"); "" })
-    }
-
     override fun FlowContent.buildText(textNode: ContentText) =
         when {
             textNode.hasStyle(TextStyle.Indented) -> {
@@ -640,32 +718,31 @@ open class HtmlRenderer(
     override fun render(root: RootPageNode) {
         shouldRenderSourceSetBubbles = shouldRenderSourceSetBubbles(root)
         super.render(root)
-        runBlocking(Dispatchers.Default) {
-            launch {
-                outputWriter.write("scripts/pages", "var pages = ${searchbarDataInstaller.generatePagesList()}", ".js")
-            }
-        }
     }
 
     private fun PageNode.root(path: String) = locationProvider.pathToRoot(this) + path
 
     override fun buildPage(page: ContentPage, content: (FlowContent, ContentPage) -> Unit): String =
         buildHtml(page, page.embeddedResources) {
-            div {
+            div("main-content") {
                 id = "content"
-                attributes["pageIds"] = page.dri.first().toString()
+                attributes["pageIds"] = "${context.configuration.moduleName}::${page.pageId}"
                 content(this, page)
             }
         }
 
     private fun resolveLink(link: String, page: PageNode): String = if (URI(link).isAbsolute) link else page.root(link)
 
-    open fun buildHtml(page: PageNode, resources: List<String>, content: FlowContent.() -> Unit) =
-        createHTML().html {
+    open fun buildHtml(page: PageNode, resources: List<String>, content: FlowContent.() -> Unit): String {
+        val pathToRoot = locationProvider.pathToRoot(page)
+        return createHTML().prepareForTemplates().html {
             head {
                 meta(name = "viewport", content = "width=device-width, initial-scale=1", charset = "UTF-8")
                 title(page.name)
                 link(href = page.root("images/logo-icon.svg"), rel = "icon", type = "image/svg")
+                templateCommand(PathToRootSubstitutionCommand("###", default = pathToRoot)) {
+                    script { unsafe { +"""var pathToRoot = "###";""" } }
+                }
                 resources.forEach {
                     when {
                         it.substringBefore('?').substringAfterLast('.') == "css" -> link(
@@ -678,23 +755,19 @@ open class HtmlRenderer(
                         ) {
                             async = true
                         }
+                        it.isImage() -> link(href = page.root(it))
                         else -> unsafe { +it }
                     }
                 }
-                script { unsafe { +"""var pathToRoot = "${locationProvider.pathToRoot(page)}";""" } }
             }
             body {
                 div {
                     id = "container"
                     div {
                         id = "leftColumn"
+                        clickableLogo(page, pathToRoot)
                         div {
-                            id = "logo"
-                        }
-                        if (page !is MultimoduleRootPage) {
-                            div {
-                                id = "paneSearch"
-                            }
+                            id = "paneSearch"
                         }
                         div {
                             id = "sideMenu"
@@ -706,42 +779,22 @@ open class HtmlRenderer(
                             id = "leftToggler"
                             span("icon-toggler")
                         }
-                        div {
-                            id = "searchBar"
-                        }
-                        script(type = ScriptType.textJavaScript, src = page.root("scripts/pages.js")) {}
                         script(type = ScriptType.textJavaScript, src = page.root("scripts/main.js")) {}
                         content()
                         div(classes = "footer") {
                             span("go-to-top-icon") {
-                                a(href = "#container") {
-                                    unsafe {
-                                        raw(
-                                            """
-                                    <svg width="12" height="10" viewBox="0 0 12 10" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                        <path d="M11.3337 9.66683H0.666992L6.00033 3.66683L11.3337 9.66683Z" fill="black"/>
-                                        <path d="M0.666992 0.333496H11.3337V1.66683H0.666992V0.333496Z" fill="black"/>
-                                    </svg>
-                                """.trimIndent()
-                                        )
-                                    }
-                                }
+                                a(href = "#content")
                             }
-                            span { text("© 2020 Copyright") }
+                            span {
+                                configuration?.footerMessage?.takeIf { it.isNotEmpty() }
+                                    ?.let { unsafe { raw(it) } }
+                                    ?: text(defaultFooterMessage)
+                            }
                             span("pull-right") {
-                                span { text("Sponsored and developed by dokka") }
+                                span { text("Generated by ") }
                                 a(href = "https://github.com/Kotlin/dokka") {
-                                    span(classes = "padded-icon") {
-                                        unsafe {
-                                            raw(
-                                                """
-                                    <svg width="8" height="8" viewBox="0 0 8 8" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                        <path d="M8 0H2.3949L4.84076 2.44586L0 7.28662L0.713376 8L5.55414 3.15924L8 5.6051V0Z" fill="black"/>
-                                    </svg>
-                                """.trimIndent()
-                                            )
-                                        }
-                                    }
+                                    span { text("dokka") }
+                                    span(classes = "padded-icon")
                                 }
                             }
                         }
@@ -749,6 +802,42 @@ open class HtmlRenderer(
                 }
             }
         }
+    }
+
+    /**
+     * This is deliberately left open for plugins that have some other pages above ours and would like to link to them
+     * instead of ours when clicking the logo
+     */
+    open fun FlowContent.clickableLogo(page: PageNode, pathToRoot: String) {
+        if (context.configuration.delayTemplateSubstitution && page is ContentPage) {
+            templateCommand(PathToRootSubstitutionCommand(pattern = "###", default = pathToRoot)) {
+                a {
+                    href = "###index.html"
+                    div {
+                        id = "logo"
+                    }
+                }
+            }
+        } else a {
+            href = pathToRoot + "index.html"
+            div {
+                id = "logo"
+            }
+        }
+    }
+
+    private val ContentNode.isAnchorable: Boolean
+        get() = anchorLabel != null
+
+    private val ContentNode.anchorLabel: String?
+        get() = extra[SymbolAnchorHint]?.anchorName
+
+    private val ContentNode.anchor: String?
+        get() = extra[SymbolAnchorHint]?.contentKind?.let { contentKind ->
+            (locationProvider as DokkaBaseLocationProvider).anchorForDCI(DCI(dci.dri, contentKind), sourceSets)
+        }
+
+    private val isPartial = context.configuration.delayTemplateSubstitution
 }
 
 fun List<SimpleAttr>.joinAttr() = joinToString(" ") { it.extraKey + "=" + it.extraValue }
@@ -758,4 +847,7 @@ private fun String.stripDiv() = drop(5).dropLast(6) // TODO: Find a way to do it
 private val PageNode.isNavigable: Boolean
     get() = this !is RendererSpecificPage || strategy != RenderingStrategy.DoNothing
 
-fun PropertyContainer<ContentNode>.extraHtmlAttributes() = allOfType<SimpleAttr>()
+private fun PropertyContainer<ContentNode>.extraHtmlAttributes() = allOfType<SimpleAttr>()
+
+private val ContentNode.sourceSetsFilters: String
+    get() = sourceSets.sourceSetIDs.joinToString(" ") { it.toString() }

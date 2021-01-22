@@ -6,13 +6,13 @@ There a four data models that Dokka uses: Documentable Model, Documentation Mode
 
 Documentable model represents parsed data, returned by compiler analysis. It retains basic order structure of parsed `Psi` or `Descriptor` models.
 
-After creation, it is a collection of trees, each with `DModel` as a root. After the Merge step, all trees are folded into one. 
+After creation, it is a collection of trees, each with `DModule` as a root. After the Merge step, all trees are folded into one. 
 
 The main building block of this model is `Documentable` class, that is a base class for all more specific types that represents elements of parsed Kotlin and Java classes with pretty self-explanatory names: `DPackage`, `DFunction` and so on. `DClasslike` is a base for class-like elements, such as Classes, Enums, Interfaces and so on.
 
 There are three non-documentable classes important for the model: `DRI`, `SourceSetDependent` and `ExtraProperty`.
 
-* `DRI` (Dokka Resource Identifier) is an unique value that identifies specific `Documentable`. All references to other documentables different than direct ownership are described using DRIs. For example, `DFunction` with parameter of type `X` has only X's DRI, not the actual reference to X's Documentable object.
+* `DRI` (Dokka Resource Identifier) is a unique value that identifies specific `Documentable`. All references to other documentables different than direct ownership are described using DRIs. For example, `DFunction` with parameter of type `X` has only X's DRI, not the actual reference to X's Documentable object.
 * `SourceSetDependent` is a map that handles multiplatform data, by connecting platform-specific data, declared with either `expect` or `actual` modifier, to a particular Source Set
 * `ExtraProperty` is used to store any additional information that falls outside of regular model. It is highly recommended to use extras to provide any additional information when creating custom Dokka plugins. This element is a bit more complex, so you can read more about how to use it below.
 

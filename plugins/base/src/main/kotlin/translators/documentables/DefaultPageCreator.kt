@@ -16,6 +16,7 @@ import org.jetbrains.kotlin.utils.addToStdlib.safeAs
 import kotlin.reflect.KClass
 import kotlin.reflect.full.isSubclassOf
 import org.jetbrains.dokka.DokkaConfiguration.DokkaSourceSet
+import org.jetbrains.dokka.base.DokkaBaseConfiguration
 import org.jetbrains.dokka.base.resolvers.anchors.SymbolAnchorHint
 import org.jetbrains.dokka.base.transformers.documentables.ClashingDriIdentifier
 
@@ -25,61 +26,84 @@ private val specialTags: Set<KClass<out TagWrapper>> =
     setOf(Property::class, Description::class, Constructor::class, Receiver::class, Param::class, See::class)
 
 open class DefaultPageCreator(
+    configuration: DokkaBaseConfiguration?,
     commentsToContentConverter: CommentsToContentConverter,
     signatureProvider: SignatureProvider,
     val logger: DokkaLogger
 ) {
     protected open val contentBuilder = PageContentBuilder(commentsToContentConverter, signatureProvider, logger)
 
+    protected val separateInheritedMembers =
+        configuration?.separateInheritedMembers ?: DokkaBaseConfiguration.separateInheritedMembersDefault
+
     open fun pageForModule(m: DModule) =
         ModulePageNode(m.name.ifEmpty { "<root>" }, contentForModule(m), m, m.packages.map(::pageForPackage))
 
     open fun pageForPackage(p: DPackage): PackagePageNode = PackagePageNode(
         p.name, contentForPackage(p), setOf(p.dri), p,
-        p.classlikes.renameClashingClasslikes().map(::pageForClasslike) +
-                p.functions.map(::pageForFunction)
+        p.classlikes.renameClashingDocumentable().map(::pageForClasslike) +
+                p.functions.renameClashingDocumentable()
+                    .map(::pageForFunction) + p.properties.mapNotNull(::pageForProperty)
     )
 
     open fun pageForEnumEntry(e: DEnumEntry): ClasslikePageNode =
         ClasslikePageNode(
-            e.name, contentForEnumEntry(e), setOf(e.dri), e,
-            e.classlikes.renameClashingClasslikes().map(::pageForClasslike) +
-                    e.filteredFunctions.map(::pageForFunction)
+            e.nameAfterClash(), contentForEnumEntry(e), setOf(e.dri), e,
+            e.classlikes.renameClashingDocumentable().map(::pageForClasslike) +
+                    e.filteredFunctions.renameClashingDocumentable().map(::pageForFunction) +
+                    e.properties.renameClashingDocumentable().mapNotNull(::pageForProperty)
         )
 
     open fun pageForClasslike(c: DClasslike): ClasslikePageNode {
         val constructors = if (c is WithConstructors) c.constructors else emptyList()
 
         return ClasslikePageNode(
-            c.name.orEmpty(), contentForClasslike(c), setOf(c.dri), c,
+            c.nameAfterClash(), contentForClasslike(c), setOf(c.dri), c,
             constructors.map(::pageForFunction) +
-                    c.classlikes.renameClashingClasslikes().map(::pageForClasslike) +
-                    c.filteredFunctions.map(::pageForFunction) +
+                    c.classlikes.renameClashingDocumentable().map(::pageForClasslike) +
+                    c.filteredFunctions.renameClashingDocumentable().map(::pageForFunction) +
+                    c.filteredProperties.renameClashingDocumentable().mapNotNull(::pageForProperty) +
                     if (c is DEnum) c.entries.map(::pageForEnumEntry) else emptyList()
+
         )
     }
 
-    private fun List<DClasslike>.renameClashingClasslikes(): List<DClasslike> = groupBy { it.dri }.values.flatMap { classlikes ->
-        if (classlikes.size == 1) classlikes else classlikes.map { classlike ->
-            fun ClashingDriIdentifier?.toName() = this?.value?.joinToString(", ", "(", ")") { it.displayName } ?: ""
-            when(classlike) {
-                is DClass -> classlike.copy(name = classlike.name + classlike.extra[ClashingDriIdentifier]?.toName())
-                is DObject -> classlike.copy(name = classlike.name.orEmpty() + classlike.extra[ClashingDriIdentifier]?.toName())
-                is DAnnotation -> classlike.copy(name = classlike.name + classlike.extra[ClashingDriIdentifier]?.toName())
-                is DInterface -> classlike.copy(name = classlike.name + classlike.extra[ClashingDriIdentifier]?.toName())
-                is DEnum -> classlike.copy(name = classlike.name + classlike.extra[ClashingDriIdentifier]?.toName())
+    private fun <T> T.toClashedName() where T : Documentable, T : WithExtraProperties<T> =
+        (extra[ClashingDriIdentifier]?.value?.joinToString(", ", "[", "]") { it.displayName } ?: "") + name.orEmpty()
+
+    private fun <T> List<T>.renameClashingDocumentable(): List<T> where T : Documentable =
+        groupBy { it.dri }.values.flatMap { elements ->
+            if (elements.size == 1) elements else elements.mapNotNull { element ->
+                when (element) {
+                    is DClass -> element.copy(extra = element.extra + DriClashAwareName(element.toClashedName()))
+                    is DObject -> element.copy(extra = element.extra + DriClashAwareName(element.toClashedName()))
+                    is DAnnotation -> element.copy(extra = element.extra + DriClashAwareName(element.toClashedName()))
+                    is DInterface -> element.copy(extra = element.extra + DriClashAwareName(element.toClashedName()))
+                    is DEnum -> element.copy(extra = element.extra + DriClashAwareName(element.toClashedName()))
+                    is DFunction -> element.copy(extra = element.extra + DriClashAwareName(element.toClashedName()))
+                    is DProperty -> element.copy(extra = element.extra + DriClashAwareName(element.toClashedName()))
+                    is DTypeAlias -> element.copy(extra = element.extra + DriClashAwareName(element.toClashedName()))
+                    else -> null
+                } as? T?
             }
         }
-    }
 
-    open fun pageForFunction(f: DFunction) = MemberPageNode(f.name, contentForFunction(f), setOf(f.dri), f)
+    open fun pageForFunction(f: DFunction) = MemberPageNode(f.nameAfterClash(), contentForFunction(f), setOf(f.dri), f)
+
+    open fun pageForProperty(p: DProperty): MemberPageNode? =
+        MemberPageNode(p.nameAfterClash(), contentForProperty(p), setOf(p.dri), p)
+
+    private fun <T> T.isInherited(): Boolean where T : Documentable, T : WithExtraProperties<T> =
+        sourceSets.all { sourceSet -> extra[InheritedMember]?.isInherited(sourceSet) == true }
 
     private val WithScope.filteredFunctions: List<DFunction>
-        get() = functions.mapNotNull { function ->
-            function.takeIf {
-                it.sourceSets.any { sourceSet -> it.extra[InheritedFunction]?.isInherited(sourceSet) != true }
-            }
-        }
+        get() = functions.filterNot { it.isInherited() }
+
+    private val WithScope.filteredProperties: List<DProperty>
+        get() = properties.filterNot { it.isInherited() }
+
+    private fun <T> Collection<T>.splitInherited(): Pair<List<T>, List<T>> where T : Documentable, T : WithExtraProperties<T> =
+        partition { it.isInherited() }
 
     protected open fun contentForModule(m: DModule) = contentBuilder.contentFor(m) {
         group(kind = ContentKind.Cover) {
@@ -97,7 +121,7 @@ open class DefaultPageCreator(
         }
         +contentForComments(m)
 
-        block("Packages", 2, ContentKind.Packages, m.packages, m.sourceSets.toSet()) {
+        block("Packages", 2, ContentKind.Packages, m.packages, m.sourceSets.toSet(), needsAnchors = true) {
             val documentations = it.sourceSets.map { platform ->
                 it.descriptions[platform]?.also { it.root }
             }
@@ -106,7 +130,7 @@ open class DefaultPageCreator(
 
             link(it.name, it.dri)
             if (it.sourceSets.size == 1 || (documentations.isNotEmpty() && haveSameContent)) {
-                documentations.first()?.let { firstSentenceComment(kind = ContentKind.Comment, content = it) }
+                documentations.first()?.let { firstSentenceComment(kind = ContentKind.Comment, content = it.root) }
             }
         }
     }
@@ -141,46 +165,40 @@ open class DefaultPageCreator(
             (s as? DPackage)?.typealiases ?: emptyList()
         ).flatten()
         divergentBlock("Types", types, ContentKind.Classlikes, extra = mainExtra + SimpleAttr.header("Types"))
-        divergentBlock(
-            "Functions",
-            s.functions.sorted(),
-            ContentKind.Functions,
-            extra = mainExtra + SimpleAttr.header("Functions")
-        )
-        block(
-            "Properties",
-            2,
-            ContentKind.Properties,
-            s.properties,
-            sourceSets.toSet(),
-            needsAnchors = true,
-            extra = mainExtra + SimpleAttr.header("Properties")
-        ) {
-            link(it.name, it.dri, kind = ContentKind.Main)
-            sourceSetDependentHint(it.dri, it.sourceSets.toSet(), kind = ContentKind.SourceSetDependentHint) {
-                contentForBrief(it)
-                +buildSignature(it)
-            }
+        if (separateInheritedMembers) {
+            val (inheritedFunctions, memberFunctions) = s.functions.splitInherited()
+            val (inheritedProperties, memberProperties) = s.properties.splitInherited()
+            propertiesBlock("Properties", memberProperties, sourceSets)
+            propertiesBlock("Inherited properties", inheritedProperties, sourceSets)
+            functionsBlock("Functions", memberFunctions)
+            functionsBlock("Inherited functions", inheritedFunctions)
+        } else {
+            functionsBlock("Functions", s.functions)
+            propertiesBlock("Properties", s.properties, sourceSets)
         }
         s.safeAs<WithExtraProperties<Documentable>>()?.let { it.extra[InheritorsInfo] }?.let { inheritors ->
             val map = inheritors.value.filter { it.value.isNotEmpty() }
             if (map.values.any()) {
                 header(2, "Inheritors") { }
                 +ContentTable(
-                    listOf(contentBuilder.contentFor(mainDRI, mainSourcesetData) {
+                    header = listOf(contentBuilder.contentFor(mainDRI, mainSourcesetData) {
                         text("Name")
                     }),
-                    map.entries.flatMap { entry -> entry.value.map { Pair(entry.key, it) } }
+                    children = map.entries.flatMap { entry -> entry.value.map { Pair(entry.key, it) } }
                         .groupBy({ it.second }, { it.first }).map { (classlike, platforms) ->
-                            buildGroup(setOf(dri), platforms.toSet(), ContentKind.Inheritors) {
-                                link(
-                                    classlike.classNames?.substringBeforeLast(".") ?: classlike.toString()
-                                        .also { logger.warn("No class name found for DRI $classlike") }, classlike
-                                )
+                            val label = classlike.classNames?.substringBeforeLast(".") ?: classlike.toString()
+                                .also { logger.warn("No class name found for DRI $classlike") }
+                            buildGroup(
+                                setOf(classlike),
+                                platforms.toSet(),
+                                ContentKind.Inheritors,
+                                extra = mainExtra + SymbolAnchorHint(label, ContentKind.Inheritors)
+                            ) {
+                                link(label, classlike)
                             }
                         },
-                    DCI(setOf(dri), ContentKind.Inheritors),
-                    sourceSets.toDisplaySourceSets(),
+                    dci = DCI(setOf(dri), ContentKind.Inheritors),
+                    sourceSets = sourceSets.toDisplaySourceSets(),
                     style = emptySet(),
                     extra = mainExtra + SimpleAttr.header("Inheritors")
                 )
@@ -195,8 +213,8 @@ open class DefaultPageCreator(
         group(kind = ContentKind.Cover) {
             cover(e.name)
             sourceSetDependentHint(e.dri, e.sourceSets.toSet()) {
-                +contentForDescription(e)
                 +buildSignature(e)
+                +contentForDescription(e)
             }
         }
         group(styles = setOf(ContentStyle.TabbedContent)) {
@@ -215,8 +233,8 @@ open class DefaultPageCreator(
         group(kind = ContentKind.Cover, sourceSets = mainSourcesetData + extensions.sourceSets) {
             cover(c.name.orEmpty())
             sourceSetDependentHint(c.dri, c.sourceSets) {
-                +contentForDescription(c)
                 +buildSignature(c)
+                +contentForDescription(c)
             }
         }
 
@@ -229,6 +247,7 @@ open class DefaultPageCreator(
                     ContentKind.Constructors,
                     c.constructors.filter { it.extra[PrimaryConstructorExtra] == null || it.documentation.isNotEmpty() },
                     c.sourceSets,
+                    needsAnchors = true,
                     extra = PropertyContainer.empty<ContentNode>() + SimpleAttr.header("Constructors")
                 ) {
                     link(it.name, it.dri, kind = ContentKind.Main)
@@ -236,10 +255,11 @@ open class DefaultPageCreator(
                         it.dri,
                         it.sourceSets.toSet(),
                         kind = ContentKind.SourceSetDependentHint,
-                        styles = emptySet()
+                        styles = emptySet(),
+                        extra = PropertyContainer.empty<ContentNode>()
                     ) {
-                        contentForBrief(it)
                         +buildSignature(it)
+                        contentForBrief(it)
                     }
                 }
             }
@@ -251,13 +271,19 @@ open class DefaultPageCreator(
                     c.entries,
                     c.sourceSets.toSet(),
                     needsSorting = false,
+                    needsAnchors = true,
                     extra = mainExtra + SimpleAttr.header("Entries"),
                     styles = emptySet()
                 ) {
                     link(it.name, it.dri)
-                    sourceSetDependentHint(it.dri, it.sourceSets.toSet(), kind = ContentKind.SourceSetDependentHint) {
-                        contentForBrief(it)
+                    sourceSetDependentHint(
+                        it.dri,
+                        it.sourceSets.toSet(),
+                        kind = ContentKind.SourceSetDependentHint,
+                        extra = PropertyContainer.empty<ContentNode>()
+                    ) {
                         +buildSignature(it)
+                        contentForBrief(it)
                     }
                 }
             }
@@ -279,9 +305,8 @@ open class DefaultPageCreator(
     @Suppress("UNCHECKED_CAST")
     private inline fun <reified T : NamedTagWrapper> GroupedTags.withTypeNamed(): Map<String, SourceSetDependent<T>> =
         (this[T::class] as List<Pair<DokkaSourceSet, T>>?)
-            ?.groupBy { it.second.name }
+            ?.groupByTo(linkedMapOf()) { it.second.name }
             ?.mapValues { (_, v) -> v.toMap() }
-            ?.toSortedMap(String.CASE_INSENSITIVE_ORDER)
             .orEmpty()
 
     private inline fun <reified T : TagWrapper> GroupedTags.isNotEmptyForTag(): Boolean =
@@ -305,16 +330,17 @@ open class DefaultPageCreator(
                 }
             }
 
-            val unnamedTags: List<SourceSetDependent<TagWrapper>> =
-                tags.filterNot { (k, _) -> k.isSubclassOf(NamedTagWrapper::class) || k in specialTags }
-                    .map { (_, v) -> v.mapNotNull { (k, v) -> k?.let { it to v } }.toMap() }
+            val unnamedTags = tags.filterNot { (k, _) -> k.isSubclassOf(NamedTagWrapper::class) || k in specialTags }
+                .values.flatten().groupBy { it.first }.mapValues { it.value.map { it.second } }
             if (unnamedTags.isNotEmpty()) {
                 platforms.forEach { platform ->
-                    unnamedTags.forEach { pdTag ->
-                        pdTag[platform]?.also { tag ->
-                            group(sourceSets = setOf(platform), styles = emptySet()) {
-                                header(4, tag.toHeaderString())
-                                comment(tag.root)
+                    unnamedTags[platform]?.let { tags ->
+                        if (tags.isNotEmpty()) {
+                            tags.groupBy { it::class }.forEach { (_, sameCategoryTags) ->
+                                group(sourceSets = setOf(platform), styles = emptySet()) {
+                                    header(4, sameCategoryTags.first().toHeaderString())
+                                    sameCategoryTags.forEach { comment(it.root) }
+                                }
                             }
                         }
                     }
@@ -348,18 +374,18 @@ open class DefaultPageCreator(
                         val receiver = tags.withTypeUnnamed<Receiver>()
                         val params = tags.withTypeNamed<Param>()
                         table(kind = ContentKind.Parameters) {
-                            platforms.flatMap { platform ->
+                            platforms.forEach { platform ->
                                 val possibleFallbacks = d.getPossibleFallbackSourcesets(platform)
-                                val receiverRow = (receiver[platform] ?: receiver.fallback(possibleFallbacks))?.let {
-                                    buildGroup(sourceSets = setOf(platform), kind = ContentKind.Parameters) {
+                                (receiver[platform] ?: receiver.fallback(possibleFallbacks))?.let {
+                                    row(sourceSets = setOf(platform), kind = ContentKind.Parameters) {
                                         text("<receiver>", styles = mainStyles + ContentStyle.RowTitle)
                                         comment(it.root)
                                     }
                                 }
 
-                                val paramRows = params.mapNotNull { (_, param) ->
+                                params.mapNotNull { (_, param) ->
                                     (param[platform] ?: param.fallback(possibleFallbacks))?.let {
-                                        buildGroup(sourceSets = setOf(platform), kind = ContentKind.Parameters) {
+                                        row(sourceSets = setOf(platform), kind = ContentKind.Parameters) {
                                             text(
                                                 it.name,
                                                 kind = ContentKind.Parameters,
@@ -369,8 +395,6 @@ open class DefaultPageCreator(
                                         }
                                     }
                                 }
-
-                                listOfNotNull(receiverRow) + paramRows
                             }
                         }
                     }
@@ -388,14 +412,14 @@ open class DefaultPageCreator(
                     sourceSetDependentHint(sourceSets = platforms.toSet(), kind = ContentKind.SourceSetDependentHint) {
                         val seeAlsoTags = tags.withTypeNamed<See>()
                         table(kind = ContentKind.Sample) {
-                            platforms.flatMap { platform ->
+                            platforms.forEach { platform ->
                                 val possibleFallbacks = d.getPossibleFallbackSourcesets(platform)
-                                seeAlsoTags.mapNotNull { (_, see) ->
+                                seeAlsoTags.forEach { (_, see) ->
                                     (see[platform] ?: see.fallback(possibleFallbacks))?.let {
-                                        buildGroup(
+                                        row(
                                             sourceSets = setOf(platform),
                                             kind = ContentKind.Comment,
-                                            styles = mainStyles + ContentStyle.RowTitle
+                                            styles = this@sourceSetDependentHint.mainStyles + ContentStyle.RowTitle,
                                         ) {
                                             if (it.address != null) link(
                                                 it.name,
@@ -405,6 +429,31 @@ open class DefaultPageCreator(
                                             else text(it.name, kind = ContentKind.Comment)
                                             comment(it.root)
                                         }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        fun DocumentableContentBuilder.contentForThrows() {
+            val throws = tags.withTypeNamed<Throws>()
+            if (throws.isNotEmpty()) {
+                header(4, "Throws")
+                sourceSetDependentHint(sourceSets = platforms.toSet(), kind = ContentKind.SourceSetDependentHint) {
+                    platforms.forEach { sourceset ->
+                        table(kind = ContentKind.Main, sourceSets = setOf(sourceset)) {
+                            throws.entries.forEach { entry ->
+                                entry.value[sourceset]?.let { throws ->
+                                    row(sourceSets = setOf(sourceset)) {
+                                        group(styles = mainStyles + ContentStyle.RowTitle) {
+                                            throws.exceptionAddress?.let {
+                                                link(text = entry.key, address = it)
+                                            } ?: text(entry.key)
+                                        }
+                                        comment(throws.root)
                                     }
                                 }
                             }
@@ -445,6 +494,7 @@ open class DefaultPageCreator(
                 contentForSamples()
                 contentForSeeAlso()
                 contentForParams()
+                contentForThrows()
             }
         }.children
     }
@@ -453,7 +503,8 @@ open class DefaultPageCreator(
         documentable.sourceSets.forEach { sourceSet ->
             documentable.documentation[sourceSet]?.children?.firstOrNull()?.root?.let {
                 group(sourceSets = setOf(sourceSet), kind = ContentKind.BriefComment) {
-                    comment(it)
+                    if (documentable.hasSeparatePage) firstSentenceComment(it)
+                    else comment(it)
                 }
             }
         }
@@ -476,19 +527,50 @@ open class DefaultPageCreator(
 
     protected open fun contentForFunction(f: DFunction) = contentForMember(f)
 
+    protected open fun contentForProperty(p: DProperty) = contentForMember(p)
+
     protected open fun contentForMember(d: Documentable) = contentBuilder.contentFor(d) {
         group(kind = ContentKind.Cover) {
             cover(d.name.orEmpty())
         }
         divergentGroup(ContentDivergentGroup.GroupID("member")) {
             instance(setOf(d.dri), d.sourceSets.toSet()) {
-                before {
+                divergent {
+                    +buildSignature(d)
+                }
+                after {
                     +contentForDescription(d)
                     +contentForComments(d)
                 }
-                divergent(kind = ContentKind.Symbol) {
-                    +buildSignature(d)
-                }
+            }
+        }
+    }
+
+    private fun DocumentableContentBuilder.functionsBlock(name: String, list: Collection<DFunction>) = divergentBlock(
+        name,
+        list.sorted(),
+        ContentKind.Functions,
+        extra = mainExtra + SimpleAttr.header(name)
+    )
+
+    private fun DocumentableContentBuilder.propertiesBlock(
+        name: String,
+        list: Collection<DProperty>,
+        sourceSets: Set<DokkaSourceSet>
+    ) {
+        block(
+            name,
+            2,
+            ContentKind.Properties,
+            list,
+            sourceSets,
+            needsAnchors = true,
+            extra = mainExtra + SimpleAttr.header(name)
+        ) {
+            link(it.name, it.dri, kind = ContentKind.Main)
+            sourceSetDependentHint(it.dri, it.sourceSets.toSet(), kind = ContentKind.SourceSetDependentHint) {
+                +buildSignature(it)
+                contentForBrief(it)
             }
         }
     }
@@ -507,29 +589,35 @@ open class DefaultPageCreator(
                     // This hacks displaying actual typealias signatures along classlike ones
                     .mapValues { if (it.value.any { it is DClasslike }) it.value.filter { it !is DTypeAlias } else it.value }
                     .toSortedMap(compareBy(nullsLast(String.CASE_INSENSITIVE_ORDER)) { it })
-                    .map { (elementName, elements) -> // This groupBy should probably use LocationProvider
-                        buildGroup(
+                    .forEach { (elementName, elements) -> // This groupBy should probably use LocationProvider
+                        row(
                             dri = elements.map { it.dri }.toSet(),
                             sourceSets = elements.flatMap { it.sourceSets }.toSet(),
                             kind = kind,
-                            styles = emptySet()
+                            styles = emptySet(),
+                            extra = elementName?.let { name -> extra + SymbolAnchorHint(name, kind) } ?: extra
                         ) {
                             link(elementName.orEmpty(), elements.first().dri, kind = kind)
                             divergentGroup(
                                 ContentDivergentGroup.GroupID(name),
                                 elements.map { it.dri }.toSet(),
-                                kind = kind
+                                kind = kind,
+                                extra = extra
                             ) {
                                 elements.map {
-                                    instance(setOf(it.dri), it.sourceSets.toSet(), extra = PropertyContainer.withAll(SymbolAnchorHint)) {
-                                        before {
-                                            contentForBrief(it)
-                                            contentForSinceKotlin(it)
-                                        }
-                                        divergent {
+                                    instance(
+                                        setOf(it.dri),
+                                        it.sourceSets.toSet(),
+                                        extra = PropertyContainer.withAll(SymbolAnchorHint(it.name ?: "", kind))
+                                    ) {
+                                        divergent(extra = PropertyContainer.empty()) {
                                             group {
                                                 +buildSignature(it)
                                             }
+                                        }
+                                        after {
+                                            contentForBrief(it)
+                                            contentForSinceKotlin(it)
                                         }
                                     }
                                 }
@@ -553,4 +641,10 @@ open class DefaultPageCreator(
 
     private val Documentable.descriptions: SourceSetDependent<Description>
         get() = groupedTags.withTypeUnnamed<Description>()
+
+    private val Documentable.hasSeparatePage: Boolean
+        get() = this !is DTypeAlias
+
+    private fun <T : Documentable> T.nameAfterClash(): String =
+        ((this as? WithExtraProperties<out Documentable>)?.extra?.get(DriClashAwareName)?.value ?: name).orEmpty()
 }

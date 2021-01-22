@@ -2,12 +2,13 @@ package kotlinAsJavaPlugin
 
 import org.jetbrains.dokka.model.dfs
 import org.jetbrains.dokka.pages.*
-import org.jetbrains.dokka.testApi.testRunner.AbstractCoreTest
+import org.jetbrains.dokka.base.testApi.testRunner.BaseAbstractTest
 import org.jetbrains.kotlin.utils.addToStdlib.cast
 import org.junit.jupiter.api.Test
 import matchers.content.*
 import org.jetbrains.dokka.DokkaConfiguration
 import org.jetbrains.dokka.jdk
+import org.junit.Assert
 import signatures.renderedContent
 import signatures.signature
 import utils.A
@@ -15,7 +16,7 @@ import utils.Span
 import utils.TestOutputWriterPlugin
 import utils.match
 
-class KotlinAsJavaPluginTest : AbstractCoreTest() {
+class KotlinAsJavaPluginTest : BaseAbstractTest() {
 
     @Test
     fun topLevelTest() {
@@ -174,10 +175,10 @@ class KotlinAsJavaPluginTest : AbstractCoreTest() {
                         divergentInstance {
                             divergent {
                                 group {
-                                    +"final"
+                                    +"final "
                                     group {
                                         link {
-                                            +" String"
+                                            +"String"
                                         }
                                     }
                                     link {
@@ -274,7 +275,7 @@ class KotlinAsJavaPluginTest : AbstractCoreTest() {
                         }
                         platformHinted {
                             group {
-                                +"public final class"
+                                +"public final class "
                                 link {
                                     +"C"
                                 }
@@ -329,7 +330,7 @@ class KotlinAsJavaPluginTest : AbstractCoreTest() {
         ) {
             renderingStage = { _, _ ->
                 writerPlugin.writer.renderedContent("root/kotlinAsJavaPlugin/-a-b-c/some-fun.html").signature().first().match(
-                    "final ", A("Integer"), A("someFun"), "(", A("Integer"), A("xd"), ")", Span()
+                    "final ", A("Integer"), A("someFun"), "(", A("Integer"), "xd)", Span()
                 )
             }
         }
@@ -367,8 +368,39 @@ class KotlinAsJavaPluginTest : AbstractCoreTest() {
             renderingStage = { _, _ ->
                 writerPlugin.writer.renderedContent("root/kotlinAsJavaPlugin/-a-b-c/some-fun.html").signature().first().match(
                     "final ", A("Integer"), A("someFun"), "(", A("Map"), "<", A("String"),
-                    ", ", A("Integer"), ">", A("xd"), ")", Span()
+                    ", ", A("Integer"), "> xd)", Span()
                 )
+            }
+        }
+    }
+
+    @Test
+    fun `const in top level`() {
+        val writerPlugin = TestOutputWriterPlugin()
+        val configuration = dokkaConfiguration {
+            sourceSets {
+                sourceSet {
+                    sourceRoots = listOf("src/")
+                    externalDocumentationLinks = listOf(
+                        DokkaConfiguration.ExternalDocumentationLink.jdk(8),
+                        stdlibExternalDocumentationLink
+                    )
+                }
+            }
+        }
+        testInline(
+            """
+            |/src/main/kotlin/kotlinAsJavaPlugin/Test.kt
+            |package kotlinAsJavaPlugin
+            |
+            |const val FIRST = "String"
+        """.trimMargin(),
+            configuration,
+            pluginOverrides = listOf(writerPlugin),
+            cleanupOutput = true
+        ) {
+            renderingStage = { _, _ ->
+                Assert.assertNull(writerPlugin.writer.contents["root/kotlinAsJavaPlugin/-test-kt/get-f-i-r-s-t.html"])
             }
         }
     }

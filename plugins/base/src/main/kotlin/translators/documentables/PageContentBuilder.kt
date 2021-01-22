@@ -7,12 +7,12 @@ import org.jetbrains.dokka.base.transformers.pages.comments.CommentsToContentCon
 import org.jetbrains.dokka.links.DRI
 import org.jetbrains.dokka.model.Documentable
 import org.jetbrains.dokka.model.SourceSetDependent
-import org.jetbrains.dokka.model.doc.Description
 import org.jetbrains.dokka.model.doc.DocTag
 import org.jetbrains.dokka.model.properties.PropertyContainer
 import org.jetbrains.dokka.model.toDisplaySourceSets
 import org.jetbrains.dokka.pages.*
 import org.jetbrains.dokka.utilities.DokkaLogger
+import org.jetbrains.dokka.model.properties.plus
 
 @DslMarker
 annotation class ContentBuilderMarker
@@ -88,16 +88,6 @@ open class PageContentBuilder(
             contents += this
         }
 
-        private val defaultHeaders
-            get() = listOf(
-                contentFor(mainDRI, mainSourcesetData) {
-                    text("Name")
-                },
-                contentFor(mainDRI, mainSourcesetData) {
-                    text("Summary")
-                }
-            )
-
         fun header(
             level: Int,
             text: String,
@@ -114,7 +104,7 @@ open class PageContentBuilder(
                     sourceSets,
                     kind,
                     styles,
-                    extra + SimpleAttr("anchor", text.replace("\\s".toRegex(), "").toLowerCase())
+                    extra + SymbolAnchorHint(text.replace("\\s".toRegex(), "").toLowerCase(), kind)
                 ) {
                     text(text, kind = kind)
                     block()
@@ -149,14 +139,11 @@ open class PageContentBuilder(
             sourceSets: Set<DokkaSourceSet> = mainSourcesetData,
             styles: Set<Style> = mainStyles,
             extra: PropertyContainer<ContentNode> = mainExtra,
-            operation: DocumentableContentBuilder.() -> List<ContentGroup>
+            operation: TableBuilder.() -> Unit = {}
         ) {
-            contents += ContentTable(
-                defaultHeaders,
-                operation(),
-                DCI(mainDRI, kind),
-                sourceSets.toDisplaySourceSets(), styles, extra
-            )
+            contents += TableBuilder(mainDRI, sourceSets, kind, styles, extra).apply {
+                operation()
+            }.build()
         }
 
         fun <T : Documentable> block(
@@ -169,28 +156,30 @@ open class PageContentBuilder(
             extra: PropertyContainer<ContentNode> = mainExtra,
             renderWhenEmpty: Boolean = false,
             needsSorting: Boolean = true,
-            headers: List<ContentGroup>? = null,
+            headers: List<ContentGroup> = emptyList(),
             needsAnchors: Boolean = false,
             operation: DocumentableContentBuilder.(T) -> Unit
         ) {
             if (renderWhenEmpty || elements.any()) {
                 header(level, name, kind = kind) { }
                 contents += ContentTable(
-                    headers ?: defaultHeaders,
-                    elements
+                    header = headers,
+                    children = elements
                         .let {
                             if (needsSorting)
                                 it.sortedWith(compareBy(nullsLast(String.CASE_INSENSITIVE_ORDER)) { it.name })
                             else it
                         }
                         .map {
-                            val newExtra = if (needsAnchors) extra + SymbolAnchorHint else extra
+                            val newExtra = if (needsAnchors) extra + SymbolAnchorHint.from(it, kind) else extra
                             buildGroup(setOf(it.dri), it.sourceSets.toSet(), kind, styles, newExtra) {
                                 operation(it)
                             }
                         },
-                    DCI(mainDRI, kind),
-                    sourceSets.toDisplaySourceSets(), styles, extra
+                    dci = DCI(mainDRI, kind),
+                    sourceSets = sourceSets.toDisplaySourceSets(),
+                    style = styles,
+                    extra = extra
                 )
             }
         }
@@ -222,21 +211,22 @@ open class PageContentBuilder(
             styles: Set<Style> = mainStyles,
             extra: PropertyContainer<ContentNode> = mainExtra
         ) {
-            contents += linkNode(text, address, kind, sourceSets, styles, extra)
+            contents += linkNode(text, address, DCI(mainDRI, kind), sourceSets, styles, extra)
         }
 
         fun linkNode(
             text: String,
             address: DRI,
-            kind: Kind = ContentKind.Main,
+            dci: DCI = DCI(mainDRI, ContentKind.Main),
             sourceSets: Set<DokkaSourceSet> = mainSourcesetData,
             styles: Set<Style> = mainStyles,
             extra: PropertyContainer<ContentNode> = mainExtra
         ) = ContentDRILink(
-            listOf(createText(text, kind, sourceSets, styles, extra)),
+            listOf(createText(text, dci.kind, sourceSets, styles, extra)),
             address,
-            DCI(mainDRI, kind),
-            sourceSets.toDisplaySourceSets()
+            dci,
+            sourceSets.toDisplaySourceSets(),
+            extra = extra
         )
 
         fun link(
@@ -269,7 +259,8 @@ open class PageContentBuilder(
                 contentFor(mainDRI, sourceSets, kind, styles, extra, block).children,
                 address,
                 DCI(mainDRI, kind),
-                sourceSets.toDisplaySourceSets()
+                sourceSets.toDisplaySourceSets(),
+                extra = extra
             )
         }
 
@@ -289,19 +280,25 @@ open class PageContentBuilder(
         }
 
         fun firstSentenceComment(
-            content: Description,
+            content: DocTag,
             kind: Kind = ContentKind.Comment,
             sourceSets: Set<DokkaSourceSet> = mainSourcesetData,
             styles: Set<Style> = mainStyles,
             extra: PropertyContainer<ContentNode> = mainExtra
-        ){
+        ) {
             val builtDescription = commentsConverter.buildContent(
-                content.root,
+                content,
                 DCI(mainDRI, kind),
                 sourceSets
             )
 
-            contents += ContentGroup(briefFromContentNodes(builtDescription), DCI(mainDRI, kind), sourceSets.toDisplaySourceSets(), styles, extra)
+            contents += ContentGroup(
+                briefFromContentNodes(builtDescription),
+                DCI(mainDRI, kind),
+                sourceSets.toDisplaySourceSets(),
+                styles,
+                extra
+            )
         }
 
         fun group(
@@ -385,6 +382,66 @@ open class PageContentBuilder(
         }.groupBy({ it.first }) { it.second }.forEach {
             text(it.key, sourceSets = it.value.toSet())
         }
+    }
+
+    @ContentBuilderMarker
+    open inner class TableBuilder(
+        private val mainDRI: Set<DRI>,
+        private val mainSourceSets: Set<DokkaSourceSet>,
+        private val mainKind: Kind,
+        private val mainStyles: Set<Style>,
+        private val mainExtra: PropertyContainer<ContentNode>
+    ) {
+        private val headerRows: MutableList<ContentGroup> = mutableListOf()
+        private val rows: MutableList<ContentGroup> = mutableListOf()
+        private var caption: ContentGroup? = null
+
+        fun header(
+            dri: Set<DRI> = mainDRI,
+            sourceSets: Set<DokkaSourceSet> = mainSourceSets,
+            kind: Kind = mainKind,
+            styles: Set<Style> = mainStyles,
+            extra: PropertyContainer<ContentNode> = mainExtra,
+            block: DocumentableContentBuilder.() -> Unit
+        ) {
+            headerRows += contentFor(dri, sourceSets, kind, styles, extra, block)
+        }
+
+        fun row(
+            dri: Set<DRI> = mainDRI,
+            sourceSets: Set<DokkaSourceSet> = mainSourceSets,
+            kind: Kind = mainKind,
+            styles: Set<Style> = mainStyles,
+            extra: PropertyContainer<ContentNode> = mainExtra,
+            block: DocumentableContentBuilder.() -> Unit
+        ) {
+            rows += contentFor(dri, sourceSets, kind, styles, extra, block)
+        }
+
+        fun caption(
+            dri: Set<DRI> = mainDRI,
+            sourceSets: Set<DokkaSourceSet> = mainSourceSets,
+            kind: Kind = mainKind,
+            styles: Set<Style> = mainStyles,
+            extra: PropertyContainer<ContentNode> = mainExtra,
+            block: DocumentableContentBuilder.() -> Unit
+        ) {
+            caption = contentFor(dri, sourceSets, kind, styles, extra, block)
+        }
+
+        fun build(
+            sourceSets: Set<DokkaSourceSet> = mainSourceSets,
+            kind: Kind = mainKind,
+            styles: Set<Style> = mainStyles,
+            extra: PropertyContainer<ContentNode> = mainExtra
+        ) = ContentTable(
+            headerRows,
+            caption,
+            rows,
+            DCI(mainDRI, kind),
+            sourceSets.toDisplaySourceSets(),
+            styles, extra
+        )
     }
 
     @ContentBuilderMarker

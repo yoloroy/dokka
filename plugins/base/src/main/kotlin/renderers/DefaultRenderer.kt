@@ -7,7 +7,6 @@ import kotlinx.coroutines.runBlocking
 import org.jetbrains.dokka.DokkaException
 import org.jetbrains.dokka.base.DokkaBase
 import org.jetbrains.dokka.base.resolvers.local.LocationProvider
-import org.jetbrains.dokka.base.resolvers.local.resolveOrThrow
 import org.jetbrains.dokka.model.DisplaySourceSet
 import org.jetbrains.dokka.pages.*
 import org.jetbrains.dokka.plugability.DokkaContext
@@ -15,7 +14,6 @@ import org.jetbrains.dokka.plugability.plugin
 import org.jetbrains.dokka.plugability.querySingle
 import org.jetbrains.dokka.renderers.Renderer
 import org.jetbrains.dokka.transformers.pages.PageTransformer
-import java.io.File
 
 abstract class DefaultRenderer<T>(
     protected val context: DokkaContext
@@ -105,7 +103,7 @@ abstract class DefaultRenderer<T>(
         pageContext: ContentPage,
         sourceSetRestriction: Set<DisplaySourceSet>? = null
     ) {
-        if (sourceSetRestriction == null || node.sourceSets.any { it in sourceSetRestriction }) {
+        if (sourceSetRestriction.isNullOrEmpty() || node.sourceSets.any { it in sourceSetRestriction }) {
             when (node) {
                 is ContentText -> buildText(node)
                 is ContentHeader -> buildHeader(node, pageContext, sourceSetRestriction)
@@ -170,9 +168,20 @@ abstract class DefaultRenderer<T>(
                 is RenderingStrategy.Copy -> outputWriter.writeResources(strategy.from, path)
                 is RenderingStrategy.Write -> outputWriter.write(path, strategy.text, "")
                 is RenderingStrategy.Callback -> outputWriter.write(path, strategy.instructions(this, page), ".html")
-                is RenderingStrategy.LocationResolvableWrite -> outputWriter.write(path, strategy.contentToResolve { dri, sourcesets ->
-                    locationProvider.resolveOrThrow(dri, sourcesets)
-                }, "")
+                is RenderingStrategy.DriLocationResolvableWrite -> outputWriter.write(
+                    path,
+                    strategy.contentToResolve { dri, sourcesets ->
+                        locationProvider.resolve(dri, sourcesets)
+                    },
+                    ""
+                )
+                is RenderingStrategy.PageLocationResolvableWrite -> outputWriter.write(
+                    path,
+                    strategy.contentToResolve { pageToLocate, context ->
+                        locationProvider.resolve(pageToLocate, context)
+                    },
+                    ""
+                )
                 RenderingStrategy.DoNothing -> Unit
             }
             else -> throw AssertionError(
@@ -224,8 +233,3 @@ internal typealias SerializedBeforeAndAfter = Pair<String, String>
 internal typealias InstanceWithSource = Pair<ContentDivergentInstance, DisplaySourceSet>
 
 fun ContentPage.sourceSets() = this.content.sourceSets
-
-fun ContentEmbeddedResource.isImage(): Boolean {
-    val imageExtensions = setOf("png", "jpg", "jpeg", "gif", "bmp", "tif", "webp", "svg")
-    return File(address).extension.toLowerCase() in imageExtensions
-}

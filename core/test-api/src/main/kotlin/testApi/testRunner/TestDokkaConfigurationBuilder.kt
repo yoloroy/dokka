@@ -1,8 +1,10 @@
 package testApi.testRunner
 
+import org.intellij.markdown.MarkdownElementTypes
 import org.jetbrains.dokka.*
 import org.jetbrains.dokka.links.DRI
 import org.jetbrains.dokka.model.*
+import org.jetbrains.dokka.model.doc.CustomDocTag
 import org.jetbrains.dokka.model.doc.Description
 import org.jetbrains.dokka.model.doc.DocumentationNode
 import org.jetbrains.dokka.model.doc.Text
@@ -24,26 +26,27 @@ class TestDokkaConfigurationBuilder {
             field = value
         }
     var moduleVersion: String = "1.0-SNAPSHOT"
-    var outputDir: String = "out"
+    var outputDir: File = File("out")
     var format: String = "html"
     var offlineMode: Boolean = false
     var cacheRoot: String? = null
     var pluginsClasspath: List<File> = emptyList()
-    var pluginsConfigurations: Map<String, String> = emptyMap()
+    var pluginsConfigurations: MutableList<PluginConfigurationImpl> = mutableListOf()
     var failOnWarning: Boolean = false
+    var modules: List<DokkaModuleDescriptionImpl> = emptyList()
     private val lazySourceSets = mutableListOf<Lazy<DokkaSourceSetImpl>>()
 
     fun build() = DokkaConfigurationImpl(
         moduleName = moduleName,
         moduleVersion = moduleVersion,
-        outputDir = File(outputDir),
+        outputDir = outputDir,
         cacheRoot = cacheRoot?.let(::File),
         offlineMode = offlineMode,
         sourceSets = lazySourceSets.map { it.value }.toList(),
         pluginsClasspath = pluginsClasspath,
         pluginsConfiguration = pluginsConfigurations,
-        modules = emptyList(),
-        failOnWarning = failOnWarning
+        modules = modules,
+        failOnWarning = failOnWarning,
     )
 
     fun sourceSets(block: SourceSetsBuilder.() -> Unit) {
@@ -187,6 +190,6 @@ fun dPackage(
 )
 
 fun documentationNode(vararg texts: String): DocumentationNode {
-    return DocumentationNode(texts.toList().map { Description(Text(it)) })
+    return DocumentationNode(texts.toList().map { Description(CustomDocTag(listOf(Text(it)), name = MarkdownElementTypes.MARKDOWN_FILE.name)) })
 }
 

@@ -6,13 +6,13 @@ import org.jetbrains.dokka.model.firstMemberOfType
 import org.jetbrains.dokka.pages.*
 import org.jetbrains.dokka.testApi.logger.FilteringLogger
 import org.jetbrains.dokka.testApi.logger.TestLogger
-import org.jetbrains.dokka.testApi.testRunner.AbstractCoreTest
+import org.jetbrains.dokka.base.testApi.testRunner.BaseAbstractTest
 import org.jetbrains.dokka.utilities.DokkaConsoleLogger
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.MethodSource
 import kotlin.reflect.KClass
 
-class ObviousTypeSkippingTest : AbstractCoreTest(
+class ObviousTypeSkippingTest : BaseAbstractTest(
     logger = TestLogger(FilteringLogger(minLevel = FilteringLogger.Level.Warn, DokkaConsoleLogger))
 ) {
 
@@ -54,8 +54,8 @@ class ObviousTypeSkippingTest : AbstractCoreTest(
             forFunction("fun <T> underTest(arg: T) {}", "fun <T> underTest(arg: T)"),
             forFunction("fun <T: Any> underTest(arg: T) {}", "fun <T : Any> underTest(arg: T)"),
             forFunction("fun <T: Any?> underTest(arg: T) {}", "fun <T> underTest(arg: T)"),
-            forProperty("val underTest: Int = 5", "val underTest: Int"),
-            forProperty("val underTest = 5", "val underTest: Int"),
+            forProperty("val underTest: Int = 5", "val underTest: Int = 5"),
+            forProperty("val underTest = 5", "val underTest: Int = 5"),
             forProperty("val underTest: Unit = println(5)", "val underTest: Unit"),
             forProperty("val underTest = println(5)", "val underTest: Unit"),
             forProperty("val underTest: Unit? = if (true) println(5) else null", "val underTest: Unit?"),

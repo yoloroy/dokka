@@ -6,6 +6,7 @@ import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.junit.runners.JUnit4
 import java.io.File
+import java.net.URL
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -17,13 +18,12 @@ abstract class AbstractIntegrationTest {
 
     val projectDir get() = File(temporaryTestFolder.root, "project")
 
-    fun File.allDescendentsWithExtension(extension: String): Sequence<File> {
-        return this.walkTopDown().filter { it.isFile && it.extension == extension }
-    }
+    fun File.allDescendentsWithExtension(extension: String): Sequence<File> =
+        this.walkTopDown().filter { it.isFile && it.extension == extension }
 
-    fun File.allHtmlFiles(): Sequence<File> {
-        return allDescendentsWithExtension("html")
-    }
+    fun File.allHtmlFiles(): Sequence<File> = allDescendentsWithExtension("html")
+
+    fun File.allGfmFiles(): Sequence<File> = allDescendentsWithExtension("md")
 
     protected fun assertContainsNoErrorClass(file: File) {
         val fileText = file.readText()
@@ -69,15 +69,19 @@ abstract class AbstractIntegrationTest {
                 hrefSplits.first()
             } else href
 
-            val targetFile = File(file.parent, hrefWithoutAnchors)
+            val targetFile = if (href.startsWith("file")) {
+                File(URL(hrefWithoutAnchors).path)
+            } else {
+                File(file.parent, hrefWithoutAnchors)
+            }
+
             if (targetFile.extension.isNotEmpty() && targetFile.extension !in fileExtensions) return@forEach
 
-            if (
-                targetFile.extension.isEmpty() || targetFile.extension == "html" && !href.startsWith("#")) {
+            if (targetFile.extension.isEmpty() || targetFile.extension == "html" && !href.startsWith("#")) {
                 assertTrue(
                     targetFile.exists(),
                     "${file.relativeTo(projectDir).path}: href=\"$href\"\n" +
-                            "file does not exist: ${targetFile.relativeTo(projectDir).path}"
+                            "file does not exist: ${targetFile.path}"
                 )
             }
         }
@@ -96,6 +100,14 @@ abstract class AbstractIntegrationTest {
         assertFalse(
             fileText.contains(Regex("""<span>\s*</span>""")),
             "Unexpected empty <span></span> in file ${file.path}"
+        )
+    }
+
+    protected fun assertNoUnsubstitutedTemplatesInHtml(file: File) {
+        val parsedFile = Jsoup.parse(file, "UTF-8")
+        assertTrue(
+            parsedFile.select("dokka-template-command").isEmpty(),
+            "Expected all templates to be substituted"
         )
     }
 }

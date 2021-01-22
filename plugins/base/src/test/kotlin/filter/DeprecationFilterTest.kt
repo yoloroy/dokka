@@ -1,11 +1,11 @@
 package filter
 
 import org.jetbrains.dokka.PackageOptionsImpl
-import org.jetbrains.dokka.testApi.testRunner.AbstractCoreTest
+import org.jetbrains.dokka.base.testApi.testRunner.BaseAbstractTest
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.Test
 
-class DeprecationFilterTest : AbstractCoreTest() {
+class DeprecationFilterTest : BaseAbstractTest() {
     @Test
     fun `function with false global skipDeprecated`() {
         val configuration = dokkaConfiguration {
@@ -31,7 +31,7 @@ class DeprecationFilterTest : AbstractCoreTest() {
         ) {
             documentablesFirstTransformationStep = {
                 Assertions.assertTrue(
-                    it.component2().packages.first().functions.size == 1
+                    it.first().packages.first().functions.size == 1
                 )
             }
         }
@@ -61,7 +61,7 @@ class DeprecationFilterTest : AbstractCoreTest() {
         ) {
             documentablesFirstTransformationStep = {
                 Assertions.assertTrue(
-                    it.component2().packages.first().functions.size == 1
+                    it.first().packages.first().functions.size == 1
                 )
             }
         }
@@ -91,7 +91,7 @@ class DeprecationFilterTest : AbstractCoreTest() {
         ) {
             documentablesFirstTransformationStep = {
                 Assertions.assertTrue(
-                    it.component2().packages.first().functions.size == 0
+                    it.first().packages.first().functions.size == 0
                 )
             }
         }
@@ -104,11 +104,13 @@ class DeprecationFilterTest : AbstractCoreTest() {
                     sourceRoots = listOf("src/main/kotlin/basic/Test.kt")
                     skipDeprecated = false
                     perPackageOptions = mutableListOf(
-                        PackageOptionsImpl("example",
+                        PackageOptionsImpl(
+                            "example.*",
                             true,
                             false,
                             true,
-                            false)
+                            false
+                        )
                     )
                 }
             }
@@ -128,7 +130,7 @@ class DeprecationFilterTest : AbstractCoreTest() {
         ) {
             documentablesFirstTransformationStep = {
                 Assertions.assertTrue(
-                    it.component2().packages.first().functions.size == 0
+                    it.first().packages.first().functions.size == 0
                 )
             }
         }
@@ -165,7 +167,7 @@ class DeprecationFilterTest : AbstractCoreTest() {
         ) {
             documentablesFirstTransformationStep = {
                 Assertions.assertTrue(
-                    it.component2().packages.first().functions.size == 1
+                    it.first().packages.first().functions.size == 1
                 )
             }
         }

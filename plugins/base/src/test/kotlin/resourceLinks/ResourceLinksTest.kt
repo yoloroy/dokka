@@ -3,13 +3,13 @@ package resourceLinks
 import org.jetbrains.dokka.base.DokkaBase
 import org.jetbrains.dokka.pages.RootPageNode
 import org.jetbrains.dokka.plugability.DokkaPlugin
-import org.jetbrains.dokka.testApi.testRunner.AbstractCoreTest
+import org.jetbrains.dokka.base.testApi.testRunner.BaseAbstractTest
 import org.jetbrains.dokka.transformers.pages.PageTransformer
 import org.jsoup.Jsoup
 import org.junit.jupiter.api.Test
 import utils.TestOutputWriterPlugin
 
-class ResourceLinksTest : AbstractCoreTest() {
+class ResourceLinksTest : BaseAbstractTest() {
     class TestResourcesAppenderPlugin(val resources: List<String>) : DokkaPlugin() {
         class TestResourcesAppender(val resources: List<String>) : PageTransformer {
             override fun invoke(input: RootPageNode) = input.transformContentPagesTree {
@@ -62,7 +62,7 @@ class ResourceLinksTest : AbstractCoreTest() {
                         r -> assert(it.`is`("[href=$r], [src=$r]"))
                     }
                     relativeResources.forEach {
-                        r -> assert(it.`is`("[href=../$r] , [src=../$r]"))
+                        r -> assert(it.`is`("[href=$r] , [src=$r]"))
                     }
                 }
             }

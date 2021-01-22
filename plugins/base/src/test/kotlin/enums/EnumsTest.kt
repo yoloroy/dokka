@@ -5,11 +5,12 @@ import org.jetbrains.dokka.model.ConstructorValues
 import org.jetbrains.dokka.model.DEnum
 import org.jetbrains.dokka.model.dfs
 import org.jetbrains.dokka.pages.*
-import org.jetbrains.dokka.testApi.testRunner.AbstractCoreTest
+import org.jetbrains.dokka.base.testApi.testRunner.BaseAbstractTest
+import org.jetbrains.kotlin.utils.addToStdlib.firstIsInstance
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 
-class EnumsTest : AbstractCoreTest() {
+class EnumsTest : BaseAbstractTest() {
 
     @Test
     fun basicEnum() {
@@ -202,7 +203,7 @@ class EnumsTest : AbstractCoreTest() {
             configuration
         ) {
             pagesTransformationStage = { m ->
-                val entryNode = m.children.first { it.name == "enums" }.children.first { it.name == "Test" }.children.first() as ClasslikePageNode
+                val entryNode = m.children.first { it.name == "enums" }.children.first { it.name == "Test" }.children.firstIsInstance<ClasslikePageNode>()
                 val signature = (entryNode.content as ContentGroup).dfs { it is ContentGroup && it.dci.toString() == "[enums/Test.E1///PointingToDeclaration/][Cover]" } as ContentGroup
 
                 signature.assertNode {
@@ -210,15 +211,15 @@ class EnumsTest : AbstractCoreTest() {
                     platformHinted {
                         group {
                             group {
-                                group {
-                                    +"Sample docs for E1"
-                                }
+                                link { +"E1" }
+                                +"()"
                             }
                         }
                         group {
                             group {
-                                link { +"E1" }
-                                +"()"
+                                group {
+                                    +"Sample docs for E1"
+                                }
                             }
                         }
                     }

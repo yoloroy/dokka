@@ -2,10 +2,12 @@ package org.jetbrains.dokka.gradle
 
 import org.gradle.api.internal.tasks.TaskDependencyInternal
 import org.gradle.api.provider.Property
-import org.gradle.api.tasks.*
+import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.InputFiles
+import org.gradle.api.tasks.Internal
+import org.gradle.api.tasks.OutputDirectories
 import org.jetbrains.dokka.DokkaConfigurationImpl
 import org.jetbrains.dokka.DokkaModuleDescriptionImpl
-import org.jetbrains.dokka.DokkaMultimoduleBootstrapImpl
 import java.io.File
 
 @Suppress("unused") // Shall provide source compatibility if possible
@@ -14,7 +16,7 @@ typealias DokkaMultimoduleTask = DokkaMultiModuleTask
 
 private typealias TaskPath = String
 
-abstract class DokkaMultiModuleTask : AbstractDokkaParentTask(DokkaMultimoduleBootstrapImpl::class) {
+abstract class DokkaMultiModuleTask : AbstractDokkaParentTask() {
 
     @Internal
     val fileLayout: Property<DokkaMultiModuleFileLayout> = project.objects.safeProperty<DokkaMultiModuleFileLayout>()
@@ -41,7 +43,6 @@ abstract class DokkaMultiModuleTask : AbstractDokkaParentTask(DokkaMultimoduleBo
 
     override fun generateDocumentation() {
         checkChildDokkaTasksIsNotEmpty()
-        copyChildOutputDirectories()
         super.generateDocumentation()
     }
 
@@ -49,7 +50,7 @@ abstract class DokkaMultiModuleTask : AbstractDokkaParentTask(DokkaMultimoduleBo
         moduleName = moduleName.getSafe(),
         outputDir = outputDirectory.getSafe(),
         cacheRoot = cacheRoot.getSafe(),
-        pluginsConfiguration = pluginsConfiguration.getSafe(),
+        pluginsConfiguration = buildPluginsConfiguration(),
         failOnWarning = failOnWarning.getSafe(),
         offlineMode = offlineMode.getSafe(),
         pluginsClasspath = plugins.resolve().toList(),
@@ -57,7 +58,8 @@ abstract class DokkaMultiModuleTask : AbstractDokkaParentTask(DokkaMultimoduleBo
             DokkaModuleDescriptionImpl(
                 name = dokkaTask.moduleName.getSafe(),
                 relativePathToOutputDirectory = targetChildOutputDirectory(dokkaTask).relativeTo(outputDirectory.getSafe()),
-                includes = childDokkaTaskIncludes[dokkaTask.path].orEmpty()
+                includes = childDokkaTaskIncludes[dokkaTask.path].orEmpty(),
+                sourceOutputDirectory = dokkaTask.outputDirectory.getSafe()
             )
         }
     )
